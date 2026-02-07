@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SAYE KATALE - Admin Portal</title>
+  <link rel="icon" type="image/png" href="assets/logo.png">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- LOGIN SCREEN -->
+  <div id="login-screen" class="screen active">
+    <div class="login-container">
+      <!-- Left Panel - Branding -->
+      <div class="login-branding">
+        <div class="branding-content">
+          <div class="brand-badge">ADMIN PORTAL</div>
+          <img src="assets/logo.png" alt="SAYE KATALE Logo" class="brand-logo">
+          <h1 class="brand-title">SAYE KATALE</h1>
+          <p class="brand-tagline">Demand Meets Supply</p>
+          <div class="brand-divider"></div>
+          <p class="brand-description">Centralized management dashboard for monitoring marketplace operations, user management, analytics, and platform administration.</p>
+          <div class="brand-stats">
+            <div class="brand-stat">
+              <span class="material-icons-outlined">storefront</span>
+              <span>Marketplace</span>
+            </div>
+            <div class="brand-stat">
+              <span class="material-icons-outlined">analytics</span>
+              <span>Analytics</span>
+            </div>
+            <div class="brand-stat">
+              <span class="material-icons-outlined">group</span>
+              <span>User Management</span>
+            </div>
+          </div>
+        </div>
+        <div class="branding-footer">
+          <p>Data Collectors Ltd &copy; 2025</p>
+        </div>
+      </div>
+
+      <!-- Right Panel - Login Form -->
+      <div class="login-form-panel">
+        <div class="login-form-wrapper">
+          <div class="login-mobile-logo">
+            <img src="assets/logo.png" alt="SAYE KATALE" class="mobile-logo">
+          </div>
+          <h2 class="login-title">Welcome Back</h2>
+          <p class="login-subtitle">Sign in to access the admin dashboard</p>
+
+          <div id="login-error" class="error-message hidden"></div>
+
+          <form id="login-form" onsubmit="handleLogin(event)">
+            <div class="form-group">
+              <label for="email">Email Address</label>
+              <div class="input-wrapper">
+                <span class="material-icons-outlined input-icon">mail</span>
+                <input type="email" id="email" name="email" placeholder="admin@datacollectorsltd.org" required autocomplete="email">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="password">Password</label>
+              <div class="input-wrapper">
+                <span class="material-icons-outlined input-icon">lock</span>
+                <input type="password" id="password" name="password" placeholder="Enter your password" required autocomplete="current-password">
+                <button type="button" class="toggle-password" onclick="togglePassword()">
+                  <span class="material-icons-outlined" id="password-toggle-icon">visibility_off</span>
+                </button>
+              </div>
+            </div>
+
+            <button type="submit" class="btn-login" id="login-btn">
+              <span class="btn-text">Sign In</span>
+              <div class="btn-loader hidden" id="login-loader">
+                <div class="spinner"></div>
+              </div>
+            </button>
+          </form>
+
+          <div class="login-footer">
+            <p class="security-note">
+              <span class="material-icons-outlined" style="font-size:14px;vertical-align:middle;">shield</span>
+              Secured with Supabase Authentication
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD SCREEN -->
+  <div id="dashboard-screen" class="screen">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <img src="assets/logo.png" alt="Logo" class="sidebar-logo">
+        <div class="sidebar-brand">
+          <h3>SAYE KATALE</h3>
+          <span class="sidebar-badge">Admin</span>
+        </div>
+        <button class="sidebar-close" onclick="toggleSidebar()">
+          <span class="material-icons-outlined">close</span>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-title">MAIN</div>
+        <a href="#" class="nav-item active" data-page="overview" onclick="navigateTo('overview')">
+          <span class="material-icons-outlined">dashboard</span>
+          <span>Dashboard</span>
+        </a>
+        <a href="#" class="nav-item" data-page="users" onclick="navigateTo('users')">
+          <span class="material-icons-outlined">people</span>
+          <span>Users</span>
+          <span class="nav-badge" id="users-badge"></span>
+        </a>
+        <a href="#" class="nav-item" data-page="products" onclick="navigateTo('products')">
+          <span class="material-icons-outlined">inventory_2</span>
+          <span>Products</span>
+        </a>
+        <a href="#" class="nav-item" data-page="orders" onclick="navigateTo('orders')">
+          <span class="material-icons-outlined">receipt_long</span>
+          <span>Orders</span>
+          <span class="nav-badge" id="orders-badge"></span>
+        </a>
+
+        <div class="nav-section-title">MANAGEMENT</div>
+        <a href="#" class="nav-item" data-page="complaints" onclick="navigateTo('complaints')">
+          <span class="material-icons-outlined">report_problem</span>
+          <span>Complaints</span>
+          <span class="nav-badge" id="complaints-badge"></span>
+        </a>
+        <a href="#" class="nav-item" data-page="notifications" onclick="navigateTo('notifications')">
+          <span class="material-icons-outlined">notifications</span>
+          <span>Notifications</span>
+        </a>
+        <a href="#" class="nav-item" data-page="analytics" onclick="navigateTo('analytics')">
+          <span class="material-icons-outlined">analytics</span>
+          <span>Analytics</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="admin-profile">
+          <div class="admin-avatar">
+            <span class="material-icons-outlined">admin_panel_settings</span>
+          </div>
+          <div class="admin-info">
+            <span class="admin-name" id="admin-name">Administrator</span>
+            <span class="admin-role" id="admin-role">Super Admin</span>
+          </div>
+        </div>
+        <button class="btn-logout" onclick="handleLogout()">
+          <span class="material-icons-outlined">logout</span>
+          <span>Logout</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Top Bar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="menu-toggle" onclick="toggleSidebar()">
+            <span class="material-icons-outlined">menu</span>
+          </button>
+          <h2 class="page-title" id="page-title">Dashboard Overview</h2>
+        </div>
+        <div class="topbar-right">
+          <button class="topbar-btn" onclick="refreshDashboard()" title="Refresh">
+            <span class="material-icons-outlined">refresh</span>
+          </button>
+          <div class="admin-greeting">
+            <span>Welcome, <strong id="topbar-admin-name">Admin</strong></span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Page Content Container -->
+      <div class="content-area" id="content-area">
+
+        <!-- OVERVIEW PAGE -->
+        <div class="page active" id="page-overview">
+          <!-- Stats Cards -->
+          <div class="stats-grid">
+            <div class="stat-card stat-green">
+              <div class="stat-icon"><span class="material-icons-outlined">people</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-users">--</span>
+                <span class="stat-label">Total Users</span>
+              </div>
+            </div>
+            <div class="stat-card stat-blue">
+              <div class="stat-icon"><span class="material-icons-outlined">inventory_2</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-products">--</span>
+                <span class="stat-label">Products Listed</span>
+              </div>
+            </div>
+            <div class="stat-card stat-orange">
+              <div class="stat-icon"><span class="material-icons-outlined">receipt_long</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-orders">--</span>
+                <span class="stat-label">Total Orders</span>
+              </div>
+            </div>
+            <div class="stat-card stat-red">
+              <div class="stat-icon"><span class="material-icons-outlined">report_problem</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-complaints">--</span>
+                <span class="stat-label">Open Complaints</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Activity -->
+          <div class="content-grid">
+            <div class="card">
+              <div class="card-header">
+                <h3>Recent Orders</h3>
+                <button class="btn-sm" onclick="navigateTo('orders')">View All</button>
+              </div>
+              <div class="card-body" id="recent-orders-list">
+                <div class="loading-placeholder">Loading...</div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header">
+                <h3>Recent Complaints</h3>
+                <button class="btn-sm" onclick="navigateTo('complaints')">View All</button>
+              </div>
+              <div class="card-body" id="recent-complaints-list">
+                <div class="loading-placeholder">Loading...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Users by Role -->
+          <div class="card">
+            <div class="card-header">
+              <h3>Users by Role</h3>
+            </div>
+            <div class="card-body">
+              <div class="role-bars" id="role-bars">
+                <div class="loading-placeholder">Loading...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- USERS PAGE -->
+        <div class="page" id="page-users">
+          <div class="page-toolbar">
+            <div class="search-box">
+              <span class="material-icons-outlined">search</span>
+              <input type="text" id="users-search" placeholder="Search users by name, email, or phone..." oninput="filterUsers()">
+            </div>
+            <div class="filter-group">
+              <select id="users-role-filter" onchange="filterUsers()">
+                <option value="all">All Roles</option>
+                <option value="farmer">Farmer/SHG</option>
+                <option value="buyer">Buyer/SME</option>
+                <option value="supplier">Supplier</option>
+              </select>
+            </div>
+          </div>
+          <div class="card">
+            <div class="table-container">
+              <table class="data-table" id="users-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                    <th>Role</th>
+                    <th>District</th>
+                    <th>Joined</th>
+                  </tr>
+                </thead>
+                <tbody id="users-tbody">
+                  <tr><td colspan="6" class="loading-placeholder">Loading users...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- PRODUCTS PAGE -->
+        <div class="page" id="page-products">
+          <div class="page-toolbar">
+            <div class="search-box">
+              <span class="material-icons-outlined">search</span>
+              <input type="text" id="products-search" placeholder="Search products..." oninput="filterProducts()">
+            </div>
+            <div class="filter-group">
+              <select id="products-category-filter" onchange="filterProducts()">
+                <option value="all">All Categories</option>
+              </select>
+            </div>
+          </div>
+          <div class="card">
+            <div class="table-container">
+              <table class="data-table" id="products-table">
+                <thead>
+                  <tr>
+                    <th>Product</th>
+                    <th>Category</th>
+                    <th>Price (UGX)</th>
+                    <th>Stock</th>
+                    <th>Seller</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                  </tr>
+                </thead>
+                <tbody id="products-tbody">
+                  <tr><td colspan="7" class="loading-placeholder">Loading products...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ORDERS PAGE -->
+        <div class="page" id="page-orders">
+          <div class="page-toolbar">
+            <div class="search-box">
+              <span class="material-icons-outlined">search</span>
+              <input type="text" id="orders-search" placeholder="Search orders..." oninput="filterOrders()">
+            </div>
+            <div class="filter-group">
+              <select id="orders-status-filter" onchange="filterOrders()">
+                <option value="all">All Statuses</option>
+                <option value="Pending">Pending</option>
+                <option value="Confirmed">Confirmed</option>
+                <option value="Processing">Processing</option>
+                <option value="In Transit">In Transit</option>
+                <option value="Delivered">Delivered</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
+            </div>
+          </div>
+          <div class="card">
+            <div class="table-container">
+              <table class="data-table" id="orders-table">
+                <thead>
+                  <tr>
+                    <th>Order ID</th>
+                    <th>Buyer</th>
+                    <th>Items</th>
+                    <th>Total (UGX)</th>
+                    <th>Status</th>
+                    <th>Payment</th>
+                    <th>Date</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="orders-tbody">
+                  <tr><td colspan="8" class="loading-placeholder">Loading orders...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- COMPLAINTS PAGE -->
+        <div class="page" id="page-complaints">
+          <div class="page-toolbar">
+            <div class="search-box">
+              <span class="material-icons-outlined">search</span>
+              <input type="text" id="complaints-search" placeholder="Search complaints..." oninput="filterComplaints()">
+            </div>
+            <div class="filter-group">
+              <select id="complaints-status-filter" onchange="filterComplaints()">
+                <option value="all">All Statuses</option>
+                <option value="pending">Pending</option>
+                <option value="in_progress">In Progress</option>
+                <option value="responded">Responded</option>
+                <option value="resolved">Resolved</option>
+                <option value="closed">Closed</option>
+              </select>
+              <select id="complaints-priority-filter" onchange="filterComplaints()">
+                <option value="all">All Priorities</option>
+                <option value="urgent">Urgent</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+          </div>
+          <div class="card">
+            <div class="table-container">
+              <table class="data-table" id="complaints-table">
+                <thead>
+                  <tr>
+                    <th>Subject</th>
+                    <th>User</th>
+                    <th>Category</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="complaints-tbody">
+                  <tr><td colspan="7" class="loading-placeholder">Loading complaints...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- NOTIFICATIONS PAGE -->
+        <div class="page" id="page-notifications">
+          <div class="card">
+            <div class="card-header">
+              <h3>Send Notification</h3>
+            </div>
+            <div class="card-body">
+              <form id="notification-form" onsubmit="sendNotification(event)">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Target Audience</label>
+                    <select id="notif-target" onchange="onNotifTargetChange()">
+                      <option value="all">All Users</option>
+                      <option value="role">By Role</option>
+                      <option value="single">Single User</option>
+                    </select>
+                  </div>
+                  <div class="form-group hidden" id="notif-role-group">
+                    <label>Select Role</label>
+                    <select id="notif-role">
+                      <option value="farmer">Farmer/SHG</option>
+                      <option value="buyer">Buyer/SME</option>
+                      <option value="supplier">Supplier</option>
+                    </select>
+                  </div>
+                  <div class="form-group hidden" id="notif-user-group">
+                    <label>User Email</label>
+                    <input type="text" id="notif-user-email" placeholder="Search user email...">
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Notification Type</label>
+                    <select id="notif-type">
+                      <option value="general">General</option>
+                      <option value="promotion">Promotion</option>
+                      <option value="alert">Alert</option>
+                      <option value="update">Update</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Title</label>
+                  <input type="text" id="notif-title" placeholder="Notification title..." required>
+                </div>
+                <div class="form-group">
+                  <label>Message</label>
+                  <textarea id="notif-message" rows="4" placeholder="Write your notification message..." required></textarea>
+                </div>
+                <button type="submit" class="btn-primary" id="send-notif-btn">
+                  <span class="material-icons-outlined">send</span>
+                  Send Notification
+                </button>
+              </form>
+            </div>
+          </div>
+          <div class="card" style="margin-top:20px;">
+            <div class="card-header">
+              <h3>Notification History</h3>
+            </div>
+            <div class="card-body" id="notif-history">
+              <div class="loading-placeholder">Loading history...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ANALYTICS PAGE -->
+        <div class="page" id="page-analytics">
+          <div class="stats-grid">
+            <div class="stat-card stat-green">
+              <div class="stat-icon"><span class="material-icons-outlined">call</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-calls">--</span>
+                <span class="stat-label">Total Calls</span>
+              </div>
+            </div>
+            <div class="stat-card stat-blue">
+              <div class="stat-icon"><span class="material-icons-outlined">trending_up</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-revenue">--</span>
+                <span class="stat-label">Total Revenue (UGX)</span>
+              </div>
+            </div>
+            <div class="stat-card stat-orange">
+              <div class="stat-icon"><span class="material-icons-outlined">local_shipping</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-delivered">--</span>
+                <span class="stat-label">Delivered Orders</span>
+              </div>
+            </div>
+            <div class="stat-card stat-purple">
+              <div class="stat-icon"><span class="material-icons-outlined">category</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-categories">--</span>
+                <span class="stat-label">Product Categories</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="content-grid">
+            <div class="card">
+              <div class="card-header">
+                <h3>Orders by Status</h3>
+              </div>
+              <div class="card-body" id="orders-by-status">
+                <div class="loading-placeholder">Loading...</div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header">
+                <h3>Top Products</h3>
+              </div>
+              <div class="card-body" id="top-products">
+                <div class="loading-placeholder">Loading...</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3>Call Analytics</h3>
+            </div>
+            <div class="card-body">
+              <div class="table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Buyer</th>
+                      <th>Seller</th>
+                      <th>Product</th>
+                      <th>Category</th>
+                      <th>Price</th>
+                      <th>Direction</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody id="calls-tbody">
+                    <tr><td colspan="7" class="loading-placeholder">Loading call data...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Complaint Detail Modal -->
+  <div class="modal-overlay hidden" id="complaint-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Complaint Details</h3>
+        <button class="modal-close" onclick="closeModal('complaint-modal')">
+          <span class="material-icons-outlined">close</span>
+        </button>
+      </div>
+      <div class="modal-body" id="complaint-detail-body">
+      </div>
+    </div>
+  </div>
+
+  <!-- Order Detail Modal -->
+  <div class="modal-overlay hidden" id="order-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Order Details</h3>
+        <button class="modal-close" onclick="closeModal('order-modal')">
+          <span class="material-icons-outlined">close</span>
+        </button>
+      </div>
+      <div class="modal-body" id="order-detail-body">
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast notification -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
