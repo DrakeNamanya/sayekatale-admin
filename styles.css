@@ -1109,3 +1109,21 @@ body {
 @media (max-width: 480px) {
   .stats-grid { grid-template-columns: 1fr; }
 }
+
+/* Loan Management Styles */
+.loan-tabs { display: flex; gap: 8px; }
+.loan-tab {
+  padding: 6px 16px; border: 1px solid #E5E7EB; background: #fff; border-radius: 20px;
+  font-size: 13px; cursor: pointer; transition: all 0.2s; color: #6B7280;
+}
+.loan-tab.active { background: #01AC66; color: #fff; border-color: #01AC66; }
+.loan-tab:hover:not(.active) { border-color: #01AC66; color: #01AC66; }
+.btn-approve { background: #01AC66 !important; color: #fff !important; border: none; }
+.btn-approve:hover { background: #018C52 !important; }
+.form-input {
+  width: 100%; padding: 8px 12px; border: 1px solid #E5E7EB; border-radius: 8px;
+  font-size: 14px; margin-top: 4px; box-sizing: border-box;
+}
+.form-input:focus { outline: none; border-color: #01AC66; box-shadow: 0 0 0 3px rgba(1,172,102,0.1); }
+.form-group { margin-bottom: 12px; }
+.form-group label { font-size: 13px; font-weight: 600; color: #374151; }

@@ -4,82 +4,188 @@
 // ==========================================
 
 // --- SUPABASE CONFIG ---
-// IMPORTANT: You need to provide your Supabase ANON KEY here.
-// The URL is already set from your mobile app's .env file.
 const SUPABASE_URL = 'https://oyqjovcwjqeifqmcjepk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95cWpvdmN3anFlaWZxbWNqZXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk0MTQxMzgsImV4cCI6MjA4NDk5MDEzOH0.oIgHUgKQ0sjmzc3yFaZ6SRWF7HoDsKqeph-YWJoWQKs';
 
-let supabase;
+let supabase = null;
 let currentAdmin = null;
 let allUsers = [];
 let allProducts = [];
 let allOrders = [];
 let allComplaints = [];
+let allLoans = [];
 
-// --- INIT ---
-function initSupabase() {
-  if (SUPABASE_ANON_KEY === 'YOUR_SUPABASE_ANON_KEY_HERE') {
-    console.error('Please set your Supabase anon key in app.js');
-    return false;
-  }
-  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  return true;
+// --- SUPABASE INIT ---
+// Supabase JS SDK is loaded via <script> tag in index.html (most reliable for CSP)
+// This function waits for the global to be available with retry logic
+function waitForSupabase(maxWaitMs) {
+  return new Promise((resolve, reject) => {
+    const startTime = Date.now();
+    
+    function check() {
+      // Check both possible global names
+      const sb = window.supabase;
+      if (sb && typeof sb.createClient === 'function') {
+        resolve(sb);
+        return;
+      }
+      
+      if (Date.now() - startTime > maxWaitMs) {
+        reject(new Error('Supabase SDK not available. The CDN script may be blocked by your browser or network.'));
+        return;
+      }
+      
+      setTimeout(check, 200);
+    }
+    
+    check();
+  });
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-  if (!initSupabase()) {
-    document.getElementById('login-error').textContent = 'Admin portal configuration needed. Please set the Supabase key.';
-    document.getElementById('login-error').classList.remove('hidden');
-    return;
+function initSupabase(sb) {
+  try {
+    supabase = sb.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    console.log('Supabase client initialized successfully');
+    return true;
+  } catch (err) {
+    console.error('Failed to init Supabase client:', err);
+    return false;
   }
-  
-  // Check existing session
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session) {
-    const isAdmin = await checkAdminAccess(session.user.email);
-    if (isAdmin) {
-      currentAdmin = {
-        id: session.user.id,
-        email: session.user.email,
-        name: 'Administrator'
-      };
-      await loadAdminProfile();
-      showDashboard();
+}
+
+// --- MAIN INIT ---
+document.addEventListener('DOMContentLoaded', async () => {
+  const errorEl = document.getElementById('login-error');
+
+  // Clean up URL if credentials leaked into query params (from previous GET form bug)
+  if (window.location.search.includes('email=') || window.location.search.includes('password=')) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+
+  // Attach login form handler immediately (prevents form GET submission no matter what)
+  const loginForm = document.getElementById('login-form');
+  if (loginForm) {
+    loginForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleLogin();
+      return false;
+    });
+  }
+
+  try {
+    // Wait for Supabase SDK loaded by <script> tag (up to 10 seconds)
+    const sb = await waitForSupabase(10000);
+    
+    if (!initSupabase(sb)) {
+      errorEl.textContent = 'Failed to initialize connection. Please refresh the page.';
+      errorEl.classList.remove('hidden');
       return;
     }
+
+    // Hide any previous error
+    errorEl.classList.add('hidden');
+
+    // Check existing session
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      const isAdmin = await checkAdminAccess(session.user.email);
+      if (isAdmin) {
+        currentAdmin = {
+          id: session.user.id,
+          email: session.user.email,
+          name: 'Administrator'
+        };
+        await loadAdminProfile();
+        showDashboard();
+        return;
+      }
+    }
+
+    // Show login screen
+    showScreen('login-screen');
+
+  } catch (err) {
+    console.error('Init error:', err);
+    errorEl.textContent = err.message || 'Failed to load. Please check your connection and refresh.';
+    errorEl.classList.remove('hidden');
+    
+    // Even if SDK fails, the login button should show an error instead of submitting
+    console.warn('Supabase SDK not loaded. Login will show appropriate error.');
   }
-  // Show login
-  showScreen('login-screen');
 });
 
 // --- AUTH ---
-async function handleLogin(e) {
-  e.preventDefault();
-  const email = document.getElementById('email').value.trim();
-  const password = document.getElementById('password').value;
+async function handleLogin() {
+  const emailInput = document.getElementById('email');
+  const passwordInput = document.getElementById('password');
   const errorEl = document.getElementById('login-error');
   const btn = document.getElementById('login-btn');
   const loader = document.getElementById('login-loader');
   const btnText = btn.querySelector('.btn-text');
 
+  const email = emailInput.value.trim();
+  const password = passwordInput.value;
+
+  // Validate inputs
+  if (!email || !password) {
+    errorEl.textContent = 'Please enter both email and password.';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  // Check if Supabase is ready - try to init if not
+  if (!supabase) {
+    try {
+      const sb = window.supabase;
+      if (sb && typeof sb.createClient === 'function') {
+        initSupabase(sb);
+      }
+    } catch (e) { /* ignore */ }
+    
+    if (!supabase) {
+      errorEl.textContent = 'System not ready. Please refresh the page and try again.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+  }
+
+  // Show loading state
   errorEl.classList.add('hidden');
   btnText.textContent = 'Signing in...';
   loader.classList.remove('hidden');
   btn.disabled = true;
 
   try {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    console.log('Attempting sign in for:', email);
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password
+    });
 
     if (error) {
-      throw new Error(error.message || 'Invalid credentials');
+      console.error('Supabase auth error:', error);
+      let msg = error.message || 'Invalid credentials';
+      if (msg.includes('Invalid login')) msg = 'Invalid email or password. Please try again.';
+      if (msg.includes('Email not confirmed')) msg = 'Please verify your email first.';
+      throw new Error(msg);
     }
 
+    if (!data || !data.user) {
+      throw new Error('Authentication failed. No user data returned.');
+    }
+
+    console.log('Auth successful, checking admin access...');
+
     // Check admin access
-    const isAdmin = await checkAdminAccess(email);
+    const isAdmin = await checkAdminAccess(data.user.email);
     if (!isAdmin) {
       await supabase.auth.signOut();
-      throw new Error('This account does not have admin privileges.');
+      throw new Error('This account does not have admin privileges. Contact your administrator.');
     }
+
+    console.log('Admin access confirmed. Loading dashboard...');
 
     currentAdmin = {
       id: data.user.id,
@@ -88,9 +194,15 @@ async function handleLogin(e) {
     };
 
     await loadAdminProfile();
+
+    // Clear form fields for security
+    emailInput.value = '';
+    passwordInput.value = '';
+
     showDashboard();
 
   } catch (err) {
+    console.error('Login error:', err);
     errorEl.textContent = err.message;
     errorEl.classList.remove('hidden');
   } finally {
@@ -181,7 +293,8 @@ function navigateTo(page) {
     orders: 'Orders',
     complaints: 'Complaints Management',
     notifications: 'Notifications',
-    analytics: 'Analytics & Insights'
+    analytics: 'Analytics & Insights',
+    loans: 'Loan Management'
   };
   document.getElementById('page-title').textContent = titles[page] || 'Dashboard';
 
@@ -194,6 +307,7 @@ function navigateTo(page) {
     case 'complaints': loadComplaints(); break;
     case 'notifications': loadNotificationHistory(); break;
     case 'analytics': loadAnalytics(); break;
+    case 'loans': loadLoans(); break;
   }
 
   // Close sidebar on mobile
@@ -1008,4 +1122,209 @@ async function refreshDashboard() {
   const page = current ? current.dataset.page : 'overview';
   navigateTo(page);
   showToast('Refreshed!', 'success');
+}
+
+// ==========================================
+// LOAN MANAGEMENT
+// ==========================================
+
+const SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95cWpvdmN3anFlaWZxbWNqZXBrIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2OTQxNDEzOCwiZXhwIjoyMDg0OTkwMTM4fQ.HCnYQcNpl6DF_btX28UDbbDgkb9-7oH2O00w0ir1QrY';
+
+let currentLoanFilter = 'pending';
+
+async function loadLoans() {
+  try {
+    const resp = await fetch(`${SUPABASE_URL}/rest/v1/loan_applications?order=created_at.desc`, {
+      headers: { 'apikey': SERVICE_ROLE_KEY, 'Authorization': `Bearer ${SERVICE_ROLE_KEY}` }
+    });
+    if (resp.status === 404) {
+      document.getElementById('loans-tbody').innerHTML =
+        '<tr><td colspan="9" style="text-align:center;padding:24px;color:#F59E0B;">loan_applications table not found. Please run the SQL setup in Supabase SQL Editor.</td></tr>';
+      return;
+    }
+    allLoans = await resp.json();
+
+    // Update stats
+    const pending = allLoans.filter(l => l.status === 'pending');
+    const active = allLoans.filter(l => ['disbursed','repaying','approved'].includes(l.status));
+    const rejected = allLoans.filter(l => l.status === 'rejected');
+    const totalDisbursed = active.reduce((s, l) => s + (l.approved_amount || 0), 0);
+
+    setText('stat-pending-loans', pending.length);
+    setText('stat-active-loans', active.length);
+    setText('stat-total-disbursed', totalDisbursed.toLocaleString());
+    setText('stat-rejected-loans', rejected.length);
+
+    // Update badge
+    const badge = document.getElementById('loans-badge');
+    if (badge) badge.textContent = pending.length > 0 ? pending.length : '';
+
+    filterLoans(currentLoanFilter);
+  } catch (e) {
+    console.error('Failed to load loans:', e);
+    document.getElementById('loans-tbody').innerHTML =
+      `<tr><td colspan="9" class="loading-placeholder">Error loading loans: ${e.message}</td></tr>`;
+  }
+}
+
+function filterLoans(tab) {
+  currentLoanFilter = tab;
+  document.querySelectorAll('.loan-tab').forEach(t => t.classList.remove('active'));
+  const activeTab = document.querySelector(`.loan-tab[data-tab="${tab}"]`);
+  if (activeTab) activeTab.classList.add('active');
+
+  let filtered;
+  switch (tab) {
+    case 'pending': filtered = allLoans.filter(l => l.status === 'pending'); break;
+    case 'active': filtered = allLoans.filter(l => ['disbursed','repaying','approved'].includes(l.status)); break;
+    case 'completed': filtered = allLoans.filter(l => l.status === 'completed'); break;
+    case 'rejected': filtered = allLoans.filter(l => ['rejected','defaulted'].includes(l.status)); break;
+    default: filtered = allLoans;
+  }
+
+  const tbody = document.getElementById('loans-tbody');
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:24px;color:#9CA3AF;">No ${tab} loan applications</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(loan => {
+    const score = (loan.credit_score || 0).toFixed(0);
+    const band = loan.credit_band || '';
+    const bandColor = score >= 80 ? '#4CAF50' : score >= 60 ? '#8BC34A' : score >= 40 ? '#FFC107' : score >= 20 ? '#FF9800' : '#F44336';
+    const statusColor = { pending:'#F59E0B', approved:'#4CAF50', disbursed:'#4CAF50', repaying:'#3B82F6', completed:'#0D9488', rejected:'#EF4444', defaulted:'#991B1B' }[loan.status] || '#6B7280';
+    const date = loan.created_at ? new Date(loan.created_at).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) : '';
+
+    let actions = '';
+    if (loan.status === 'pending') {
+      actions = `<button class="btn-sm btn-approve" onclick="showLoanApproval('${loan.id}')">Review</button>`;
+    } else if (['disbursed','repaying'].includes(loan.status)) {
+      actions = `<button class="btn-sm" onclick="showLoanDetail('${loan.id}')">Details</button>`;
+    } else {
+      actions = `<button class="btn-sm" onclick="showLoanDetail('${loan.id}')">View</button>`;
+    }
+
+    return `<tr>
+      <td><strong>${loan.user_name || 'Unknown'}</strong></td>
+      <td>${loan.user_phone || ''}</td>
+      <td>${loan.user_district || ''}${loan.user_subcounty ? ' - ' + loan.user_subcounty : ''}</td>
+      <td><span style="color:${bandColor};font-weight:600;">${score}/100</span> <small>(${band})</small></td>
+      <td>${(loan.requested_amount || 0).toLocaleString()}</td>
+      <td>${(loan.monthly_revenue || 0).toLocaleString()}</td>
+      <td><span class="status-badge" style="background:${statusColor}15;color:${statusColor};border:1px solid ${statusColor}30;">${(loan.status || '').toUpperCase()}</span></td>
+      <td>${date}</td>
+      <td>${actions}</td>
+    </tr>`;
+  }).join('');
+}
+
+function showLoanApproval(loanId) {
+  const loan = allLoans.find(l => l.id === loanId);
+  if (!loan) return;
+
+  const body = document.getElementById('loan-detail-body');
+  body.innerHTML = `
+    <div style="margin-bottom:16px;">
+      <h4 style="margin:0 0 4px;">${loan.user_name || 'Unknown'}</h4>
+      <p style="color:#6B7280;font-size:13px;margin:0;">${loan.user_phone || ''} | ${loan.user_district || ''} ${loan.user_subcounty ? '- ' + loan.user_subcounty : ''}</p>
+      ${loan.user_agrihub ? `<p style="color:#6B7280;font-size:12px;margin:4px 0 0;">Agrihub: ${loan.user_agrihub}</p>` : ''}
+    </div>
+    <div style="background:#F5F7FA;border-radius:12px;padding:12px;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:#6B7280;font-size:12px;">Credit Score</span><strong>${(loan.credit_score || 0).toFixed(0)}/100 (${loan.credit_band || ''})</strong></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:#6B7280;font-size:12px;">Monthly Revenue</span><strong>UGX ${(loan.monthly_revenue || 0).toLocaleString()}</strong></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:#6B7280;font-size:12px;">Total Transactions</span><strong>${loan.total_sales_count || 0}</strong></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:#6B7280;font-size:12px;">Requested Amount</span><strong>UGX ${(loan.requested_amount || 0).toLocaleString()}</strong></div>
+      <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;font-size:12px;">Suggested Amount</span><strong>UGX ${(loan.suggested_amount || 0).toLocaleString()}</strong></div>
+    </div>
+    <div class="form-group"><label>Approved Amount (UGX)</label><input type="number" id="loan-amount" value="${Math.round(loan.requested_amount || 0)}" class="form-input"></div>
+    <div style="display:flex;gap:12px;">
+      <div class="form-group" style="flex:1;"><label>Interest Rate (%)</label><input type="number" id="loan-rate" value="${loan.interest_rate || 15}" class="form-input"></div>
+      <div class="form-group" style="flex:1;"><label>Period (days)</label><input type="number" id="loan-days" value="${loan.repayment_period_days || 90}" class="form-input"></div>
+    </div>
+    <div class="form-group"><label>Review Notes</label><textarea id="loan-notes" class="form-input" rows="2" placeholder="Optional notes..."></textarea></div>
+    <div style="display:flex;gap:12px;margin-top:16px;">
+      <button class="btn-sm" style="flex:1;background:#EF4444;color:#fff;padding:10px;border:none;border-radius:8px;cursor:pointer;" onclick="reviewLoan('${loan.id}','rejected')">Reject</button>
+      <button class="btn-sm" style="flex:1;background:#01AC66;color:#fff;padding:10px;border:none;border-radius:8px;cursor:pointer;" onclick="reviewLoan('${loan.id}','approved')">Approve & Disburse</button>
+    </div>`;
+
+  document.getElementById('loan-modal').classList.remove('hidden');
+}
+
+function showLoanDetail(loanId) {
+  const loan = allLoans.find(l => l.id === loanId);
+  if (!loan) return;
+
+  const totalOwed = (loan.approved_amount || 0) * (1 + (loan.interest_rate || 0) / 100);
+  const repaid = loan.total_repaid || 0;
+  const remaining = Math.max(0, totalOwed - repaid);
+  const dueDate = loan.due_date ? new Date(loan.due_date).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) : 'N/A';
+
+  const body = document.getElementById('loan-detail-body');
+  body.innerHTML = `
+    <div style="margin-bottom:16px;"><h4 style="margin:0 0 4px;">${loan.user_name || 'Unknown'}</h4>
+    <p style="color:#6B7280;font-size:13px;margin:0;">${loan.user_phone || ''} | ${loan.user_district || ''}</p></div>
+    <div style="background:#F5F7FA;border-radius:12px;padding:12px;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:#6B7280;font-size:12px;">Status</span><strong style="text-transform:uppercase;">${loan.status}</strong></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:#6B7280;font-size:12px;">Approved Amount</span><strong>UGX ${(loan.approved_amount || 0).toLocaleString()}</strong></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:#6B7280;font-size:12px;">Interest Rate</span><strong>${loan.interest_rate || 0}%</strong></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:#6B7280;font-size:12px;">Total Owed</span><strong>UGX ${Math.round(totalOwed).toLocaleString()}</strong></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:#6B7280;font-size:12px;">Total Repaid</span><strong style="color:#4CAF50;">UGX ${Math.round(repaid).toLocaleString()}</strong></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:#6B7280;font-size:12px;">Remaining</span><strong style="color:#EF4444;">UGX ${Math.round(remaining).toLocaleString()}</strong></div>
+      <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;font-size:12px;">Due Date</span><strong>${dueDate}</strong></div>
+      ${loan.review_notes ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid #E5E7EB;"><span style="color:#6B7280;font-size:12px;">Notes: </span><span style="font-size:13px;">${loan.review_notes}</span></div>` : ''}
+    </div>
+    <button class="btn-sm" style="width:100%;background:#6B7280;color:#fff;padding:10px;border:none;border-radius:8px;cursor:pointer;" onclick="closeModal('loan-modal')">Close</button>`;
+
+  document.getElementById('loan-modal').classList.remove('hidden');
+}
+
+async function reviewLoan(loanId, status) {
+  const amount = parseFloat(document.getElementById('loan-amount').value) || 0;
+  const rate = parseFloat(document.getElementById('loan-rate').value) || 15;
+  const days = parseInt(document.getElementById('loan-days').value) || 90;
+  const notes = document.getElementById('loan-notes').value;
+
+  const data = {
+    status: status === 'approved' ? 'disbursed' : 'rejected',
+    reviewed_by: currentAdmin?.email || 'admin',
+    reviewed_at: new Date().toISOString(),
+    review_notes: notes,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (status === 'approved') {
+    data.approved_amount = amount;
+    data.interest_rate = rate;
+    data.repayment_period_days = days;
+    data.disbursed_at = new Date().toISOString();
+    data.due_date = new Date(Date.now() + days * 86400000).toISOString();
+  }
+
+  try {
+    const resp = await fetch(`${SUPABASE_URL}/rest/v1/loan_applications?id=eq.${loanId}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SERVICE_ROLE_KEY,
+        'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal',
+      },
+      body: JSON.stringify(data),
+    });
+
+    closeModal('loan-modal');
+    if (resp.ok) {
+      showToast(status === 'approved' ? 'Loan approved and disbursed!' : 'Loan rejected.', status === 'approved' ? 'success' : 'error');
+      loadLoans();
+    } else {
+      showToast('Failed to update loan.', 'error');
+    }
+  } catch (e) {
+    showToast('Network error: ' + e.message, 'error');
+  }
+}
+
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
 }

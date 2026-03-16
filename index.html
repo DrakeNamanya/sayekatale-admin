@@ -7,8 +7,9 @@
   <link rel="icon" type="image/png" href="assets/logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <link rel="stylesheet" href="styles.css">
+  <!-- Supabase JS SDK - using CDN for better reliability -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -37,6 +38,10 @@
               <span class="material-icons-outlined">group</span>
               <span>User Management</span>
             </div>
+            <div class="brand-stat">
+              <span class="material-icons-outlined">account_balance</span>
+              <span>Loans</span>
+            </div>
           </div>
         </div>
         <div class="branding-footer">
@@ -55,7 +60,7 @@
 
           <div id="login-error" class="error-message hidden"></div>
 
-          <form id="login-form" onsubmit="handleLogin(event)">
+          <form id="login-form" method="POST" action="javascript:void(0)">
             <div class="form-group">
               <label for="email">Email Address</label>
               <div class="input-wrapper">
@@ -143,6 +148,13 @@
         <a href="#" class="nav-item" data-page="analytics" onclick="navigateTo('analytics')">
           <span class="material-icons-outlined">analytics</span>
           <span>Analytics</span>
+        </a>
+
+        <div class="nav-section-title">FINANCE</div>
+        <a href="#" class="nav-item" data-page="loans" onclick="navigateTo('loans')">
+          <span class="material-icons-outlined">account_balance</span>
+          <span>Loan Management</span>
+          <span class="nav-badge" id="loans-badge"></span>
         </a>
       </nav>
 
@@ -482,6 +494,75 @@
           </div>
         </div>
 
+        <!-- LOANS PAGE -->
+        <div class="page" id="page-loans">
+          <div class="stats-grid">
+            <div class="stat-card stat-orange">
+              <div class="stat-icon"><span class="material-icons-outlined">pending_actions</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-pending-loans">--</span>
+                <span class="stat-label">Pending Applications</span>
+              </div>
+            </div>
+            <div class="stat-card stat-green">
+              <div class="stat-icon"><span class="material-icons-outlined">check_circle</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-active-loans">--</span>
+                <span class="stat-label">Active Loans</span>
+              </div>
+            </div>
+            <div class="stat-card stat-blue">
+              <div class="stat-icon"><span class="material-icons-outlined">paid</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-total-disbursed">--</span>
+                <span class="stat-label">Total Disbursed (UGX)</span>
+              </div>
+            </div>
+            <div class="stat-card stat-red">
+              <div class="stat-icon"><span class="material-icons-outlined">cancel</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-rejected-loans">--</span>
+                <span class="stat-label">Rejected</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Loan Tabs -->
+          <div class="card">
+            <div class="card-header">
+              <h3>Loan Applications</h3>
+              <div class="loan-tabs">
+                <button class="loan-tab active" data-tab="pending" onclick="filterLoans('pending')">Pending</button>
+                <button class="loan-tab" data-tab="active" onclick="filterLoans('active')">Active</button>
+                <button class="loan-tab" data-tab="completed" onclick="filterLoans('completed')">Completed</button>
+                <button class="loan-tab" data-tab="rejected" onclick="filterLoans('rejected')">Rejected</button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Applicant</th>
+                      <th>Phone</th>
+                      <th>District</th>
+                      <th>Credit Score</th>
+                      <th>Requested (UGX)</th>
+                      <th>Monthly Revenue</th>
+                      <th>Status</th>
+                      <th>Date</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="loans-tbody">
+                    <tr><td colspan="9" class="loading-placeholder">Loading loan applications...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- ANALYTICS PAGE -->
         <div class="page" id="page-analytics">
           <div class="stats-grid">
@@ -566,6 +647,19 @@
   </div>
 
   <!-- Complaint Detail Modal -->
+
+  <!-- Loan Approval Modal -->
+  <div class="modal-overlay hidden" id="loan-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Review Loan Application</h3>
+        <button class="modal-close" onclick="closeModal('loan-modal')">
+          <span class="material-icons-outlined">close</span>
+        </button>
+      </div>
+      <div class="modal-body" id="loan-detail-body"></div>
+    </div>
+  </div>
   <div class="modal-overlay hidden" id="complaint-modal">
     <div class="modal">
       <div class="modal-header">
