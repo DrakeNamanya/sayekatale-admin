@@ -16,26 +16,35 @@ let allComplaints = [];
 let allLoans = [];
 
 // --- SUPABASE INIT ---
-// Supabase JS SDK is loaded via <script> tag in index.html (most reliable for CSP)
+// Supabase JS SDK is loaded via <script> tag in index.html (CDN + local fallback)
 // This function waits for the global to be available with retry logic
 function waitForSupabase(maxWaitMs) {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
     
     function check() {
-      // Check both possible global names
+      // Check both possible global names - CDN v2 uses window.supabase
       const sb = window.supabase;
       if (sb && typeof sb.createClient === 'function') {
+        console.log('Supabase SDK found via window.supabase');
         resolve(sb);
         return;
       }
       
-      if (Date.now() - startTime > maxWaitMs) {
-        reject(new Error('Supabase SDK not available. The CDN script may be blocked by your browser or network.'));
+      // Also check if it's nested (some CDN versions)
+      if (window.supabase && window.supabase.supabase && typeof window.supabase.supabase.createClient === 'function') {
+        console.log('Supabase SDK found via window.supabase.supabase');
+        resolve(window.supabase.supabase);
         return;
       }
       
-      setTimeout(check, 200);
+      if (Date.now() - startTime > maxWaitMs) {
+        console.error('Supabase SDK not loaded after ' + maxWaitMs + 'ms. window.supabase =', typeof window.supabase);
+        reject(new Error('Supabase SDK not available. Check your network connection and try refreshing.'));
+        return;
+      }
+      
+      setTimeout(check, 150);
     }
     
     check();
@@ -56,6 +65,7 @@ function initSupabase(sb) {
 // --- MAIN INIT ---
 document.addEventListener('DOMContentLoaded', async () => {
   const errorEl = document.getElementById('login-error');
+  console.log('[Init] DOMContentLoaded fired');
 
   // Clean up URL if credentials leaked into query params (from previous GET form bug)
   if (window.location.search.includes('email=') || window.location.search.includes('password=')) {
@@ -65,17 +75,36 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Attach login form handler immediately (prevents form GET submission no matter what)
   const loginForm = document.getElementById('login-form');
   if (loginForm) {
+    // Remove any existing action attribute to prevent form submission
+    loginForm.removeAttribute('action');
     loginForm.addEventListener('submit', function(e) {
       e.preventDefault();
       e.stopPropagation();
+      console.log('[Init] Form submit event triggered');
       handleLogin();
       return false;
     });
+    // Also handle the button click directly as backup
+    const loginBtn = document.getElementById('login-btn');
+    if (loginBtn) {
+      loginBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('[Init] Login button click triggered');
+        handleLogin();
+        return false;
+      });
+    }
+    console.log('[Init] Login form handler attached');
+  } else {
+    console.error('[Init] Login form not found!');
   }
 
   try {
-    // Wait for Supabase SDK loaded by <script> tag (up to 10 seconds)
-    const sb = await waitForSupabase(10000);
+    // Wait for Supabase SDK loaded by <script> tag (up to 15 seconds)
+    console.log('[Init] Waiting for Supabase SDK...');
+    const sb = await waitForSupabase(15000);
+    console.log('[Init] Supabase SDK loaded successfully');
     
     if (!initSupabase(sb)) {
       errorEl.textContent = 'Failed to initialize connection. Please refresh the page.';
@@ -87,8 +116,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     errorEl.classList.add('hidden');
 
     // Check existing session
+    console.log('[Init] Checking existing session...');
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
+      console.log('[Init] Existing session found for:', session.user.email);
       const isAdmin = await checkAdminAccess(session.user.email);
       if (isAdmin) {
         currentAdmin = {
@@ -100,18 +131,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         showDashboard();
         return;
       }
+      console.log('[Init] Session user is not admin, showing login');
+    } else {
+      console.log('[Init] No existing session, showing login');
     }
 
     // Show login screen
     showScreen('login-screen');
 
   } catch (err) {
-    console.error('Init error:', err);
+    console.error('[Init] Error:', err);
     errorEl.textContent = err.message || 'Failed to load. Please check your connection and refresh.';
     errorEl.classList.remove('hidden');
     
     // Even if SDK fails, the login button should show an error instead of submitting
-    console.warn('Supabase SDK not loaded. Login will show appropriate error.');
+    console.warn('[Init] Supabase SDK not loaded. Login will show appropriate error.');
   }
 });
 
@@ -124,6 +158,8 @@ async function handleLogin() {
   const loader = document.getElementById('login-loader');
   const btnText = btn.querySelector('.btn-text');
 
+  console.log('[Login] handleLogin() called');
+
   const email = emailInput.value.trim();
   const password = passwordInput.value;
 
@@ -131,21 +167,30 @@ async function handleLogin() {
   if (!email || !password) {
     errorEl.textContent = 'Please enter both email and password.';
     errorEl.classList.remove('hidden');
+    console.log('[Login] Validation failed - empty fields');
     return;
   }
 
   // Check if Supabase is ready - try to init if not
   if (!supabase) {
+    console.log('[Login] Supabase client not ready, attempting late init...');
     try {
       const sb = window.supabase;
       if (sb && typeof sb.createClient === 'function') {
         initSupabase(sb);
+        console.log('[Login] Late init succeeded');
+      } else if (sb && sb.supabase && typeof sb.supabase.createClient === 'function') {
+        initSupabase(sb.supabase);
+        console.log('[Login] Late init succeeded (nested)');
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      console.error('[Login] Late init error:', e);
+    }
     
     if (!supabase) {
       errorEl.textContent = 'System not ready. Please refresh the page and try again.';
       errorEl.classList.remove('hidden');
+      console.error('[Login] Supabase still null after late init attempt');
       return;
     }
   }
@@ -157,7 +202,7 @@ async function handleLogin() {
   btn.disabled = true;
 
   try {
-    console.log('Attempting sign in for:', email);
+    console.log('[Login] Attempting sign in for:', email);
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email: email,
@@ -165,7 +210,7 @@ async function handleLogin() {
     });
 
     if (error) {
-      console.error('Supabase auth error:', error);
+      console.error('[Login] Supabase auth error:', error);
       let msg = error.message || 'Invalid credentials';
       if (msg.includes('Invalid login')) msg = 'Invalid email or password. Please try again.';
       if (msg.includes('Email not confirmed')) msg = 'Please verify your email first.';
@@ -176,7 +221,7 @@ async function handleLogin() {
       throw new Error('Authentication failed. No user data returned.');
     }
 
-    console.log('Auth successful, checking admin access...');
+    console.log('[Login] Auth successful, user:', data.user.email, '- checking admin access...');
 
     // Check admin access
     const isAdmin = await checkAdminAccess(data.user.email);
@@ -185,7 +230,7 @@ async function handleLogin() {
       throw new Error('This account does not have admin privileges. Contact your administrator.');
     }
 
-    console.log('Admin access confirmed. Loading dashboard...');
+    console.log('[Login] Admin access confirmed. Loading dashboard...');
 
     currentAdmin = {
       id: data.user.id,
@@ -202,7 +247,7 @@ async function handleLogin() {
     showDashboard();
 
   } catch (err) {
-    console.error('Login error:', err);
+    console.error('[Login] Error:', err);
     errorEl.textContent = err.message;
     errorEl.classList.remove('hidden');
   } finally {

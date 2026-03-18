@@ -3,13 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://*.supabase.co; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co; img-src 'self' data: blob: https://*.supabase.co;">
   <title>SAYE KATALE - Admin Portal</title>
   <link rel="icon" type="image/png" href="assets/logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <!-- Supabase JS SDK - using CDN for better reliability -->
+  <!-- Supabase JS SDK - CDN with local fallback -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    // Fallback: if CDN failed to load, use local copy
+    if (typeof window.supabase === 'undefined' || typeof window.supabase.createClient !== 'function') {
+      document.write('<scr' + 'ipt src="supabase.min.js"><\/scr' + 'ipt>');
+    }
+  </script>
 </head>
 <body>
 
@@ -60,7 +67,7 @@
 
           <div id="login-error" class="error-message hidden"></div>
 
-          <form id="login-form" method="POST" action="javascript:void(0)">
+          <form id="login-form" onsubmit="return false;">
             <div class="form-group">
               <label for="email">Email Address</label>
               <div class="input-wrapper">
