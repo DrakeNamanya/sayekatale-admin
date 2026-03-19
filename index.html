@@ -159,6 +159,20 @@
           <span class="material-icons-outlined">notifications</span>
           <span>Notifications</span>
         </a>
+        <a href="#" class="nav-item" data-page="team" onclick="navigateTo('team')">
+          <span class="material-icons-outlined">groups</span>
+          <span>Team Management</span>
+        </a>
+
+        <div class="nav-section-title">OPERATIONS</div>
+        <a href="#" class="nav-item" data-page="psa" onclick="navigateTo('psa')">
+          <span class="material-icons-outlined">local_shipping</span>
+          <span>PSA Dashboard</span>
+        </a>
+        <a href="#" class="nav-item" data-page="agrihub" onclick="navigateTo('agrihub')">
+          <span class="material-icons-outlined">hub</span>
+          <span>AgriHub Dashboard</span>
+        </a>
         <a href="#" class="nav-item" data-page="analytics" onclick="navigateTo('analytics')">
           <span class="material-icons-outlined">analytics</span>
           <span>Analytics</span>
@@ -656,6 +670,292 @@
           </div>
         </div>
 
+        <!-- TEAM MANAGEMENT PAGE -->
+        <div class="page" id="page-team">
+          <div class="stats-grid">
+            <div class="stat-card stat-green">
+              <div class="stat-icon"><span class="material-icons-outlined">people</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-team-active">--</span>
+                <span class="stat-label">Active Members</span>
+              </div>
+            </div>
+            <div class="stat-card stat-blue">
+              <div class="stat-icon"><span class="material-icons-outlined">badge</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-team-roles">--</span>
+                <span class="stat-label">Roles</span>
+              </div>
+            </div>
+            <div class="stat-card stat-orange">
+              <div class="stat-icon"><span class="material-icons-outlined">block</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-team-inactive">--</span>
+                <span class="stat-label">Inactive</span>
+              </div>
+            </div>
+            <div class="stat-card stat-purple">
+              <div class="stat-icon"><span class="material-icons-outlined">hub</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-team-agrihub">--</span>
+                <span class="stat-label">AgriHub Managers</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3>Team Members</h3>
+              <button class="btn-primary" onclick="showAddTeamMemberModal()">
+                <span class="material-icons-outlined">person_add</span>
+                Add Member
+              </button>
+            </div>
+            <div class="card-body">
+              <div class="table-container">
+                <table class="data-table" id="team-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Role</th>
+                      <th>Permissions</th>
+                      <th>AgriHub</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="team-tbody">
+                    <tr><td colspan="7" class="loading-placeholder">Loading team members...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Roles & Access Section -->
+          <div class="card" style="margin-top:20px;">
+            <div class="card-header">
+              <h3>Roles &amp; Access Levels</h3>
+            </div>
+            <div class="card-body" id="roles-section">
+              <div class="roles-grid" id="roles-grid"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PSA DASHBOARD PAGE -->
+        <div class="page" id="page-psa">
+          <div class="stats-grid">
+            <div class="stat-card stat-green">
+              <div class="stat-icon"><span class="material-icons-outlined">inventory_2</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-psa-products">--</span>
+                <span class="stat-label">PSA Products</span>
+              </div>
+            </div>
+            <div class="stat-card stat-blue">
+              <div class="stat-icon"><span class="material-icons-outlined">check_circle</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-psa-active">--</span>
+                <span class="stat-label">Active Products</span>
+              </div>
+            </div>
+            <div class="stat-card stat-orange">
+              <div class="stat-icon"><span class="material-icons-outlined">receipt_long</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-psa-orders">--</span>
+                <span class="stat-label">PSA Orders</span>
+              </div>
+            </div>
+            <div class="stat-card stat-purple">
+              <div class="stat-icon"><span class="material-icons-outlined">pending_actions</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-psa-pending">--</span>
+                <span class="stat-label">Pending Orders</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="content-grid">
+            <div class="card">
+              <div class="card-header">
+                <h3>PSA Revenue</h3>
+              </div>
+              <div class="card-body">
+                <div class="psa-revenue-display" id="psa-revenue-display">
+                  <span class="stat-value" style="font-size:28px;color:#2E7D32;">--</span>
+                  <span style="color:#666;font-size:13px;">Total PSA Revenue (UGX)</span>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header">
+                <h3>PSA Order Status Breakdown</h3>
+              </div>
+              <div class="card-body" id="psa-status-breakdown">
+                <div class="loading-placeholder">Loading...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- PSA Products Table -->
+          <div class="card" style="margin-top:20px;">
+            <div class="card-header">
+              <h3>PSA Products</h3>
+            </div>
+            <div class="card-body">
+              <div class="table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Product Name</th>
+                      <th>Category</th>
+                      <th>Price (UGX)</th>
+                      <th>Stock</th>
+                      <th>Status</th>
+                      <th>Created</th>
+                    </tr>
+                  </thead>
+                  <tbody id="psa-products-tbody">
+                    <tr><td colspan="6" class="loading-placeholder">Loading PSA products...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- PSA Orders Table -->
+          <div class="card" style="margin-top:20px;">
+            <div class="card-header">
+              <h3>PSA Orders</h3>
+              <div class="filter-group">
+                <select id="psa-orders-status-filter" onchange="filterPsaOrders()">
+                  <option value="all">All Statuses</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Confirmed">Confirmed</option>
+                  <option value="In Transit">In Transit</option>
+                  <option value="Delivered">Delivered</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Order ID</th>
+                      <th>Buyer</th>
+                      <th>Items</th>
+                      <th>Total (UGX)</th>
+                      <th>Status</th>
+                      <th>Seller Confirmed</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody id="psa-orders-tbody">
+                    <tr><td colspan="7" class="loading-placeholder">Loading PSA orders...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AGRIHUB DASHBOARD PAGE -->
+        <div class="page" id="page-agrihub">
+          <div class="stats-grid">
+            <div class="stat-card stat-green">
+              <div class="stat-icon"><span class="material-icons-outlined">hub</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-agrihub-total">--</span>
+                <span class="stat-label">Total AgriHubs</span>
+              </div>
+            </div>
+            <div class="stat-card stat-blue">
+              <div class="stat-icon"><span class="material-icons-outlined">people</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-agrihub-managers">--</span>
+                <span class="stat-label">Assigned Managers</span>
+              </div>
+            </div>
+            <div class="stat-card stat-orange">
+              <div class="stat-icon"><span class="material-icons-outlined">location_on</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-agrihub-districts">--</span>
+                <span class="stat-label">Districts Covered</span>
+              </div>
+            </div>
+            <div class="stat-card stat-purple">
+              <div class="stat-icon"><span class="material-icons-outlined">group</span></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-agrihub-members">--</span>
+                <span class="stat-label">Total Members</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- AgriHubs Table -->
+          <div class="card">
+            <div class="card-header">
+              <h3>AgriHub / Cooperative Centers</h3>
+              <div class="filter-group">
+                <select id="agrihub-district-filter" onchange="filterAgrihubs()">
+                  <option value="all">All Districts</option>
+                </select>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="table-container">
+                <table class="data-table" id="agrihub-table">
+                  <thead>
+                    <tr>
+                      <th>AgriHub Name</th>
+                      <th>District</th>
+                      <th>Subcounty</th>
+                      <th>Manager</th>
+                      <th>Members</th>
+                      <th>Orders</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="agrihub-tbody">
+                    <tr><td colspan="7" class="loading-placeholder">Loading AgriHub data...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- AgriHub Managers Table -->
+          <div class="card" style="margin-top:20px;">
+            <div class="card-header">
+              <h3>AgriHub Managers</h3>
+            </div>
+            <div class="card-body">
+              <div class="table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Manager Name</th>
+                      <th>Email</th>
+                      <th>Assigned AgriHub</th>
+                      <th>District</th>
+                      <th>Subcounty</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="agrihub-managers-tbody">
+                    <tr><td colspan="6" class="loading-placeholder">Loading managers...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </main>
   </div>
@@ -703,6 +1003,73 @@
 
   <!-- Toast notification -->
   <div id="toast" class="toast hidden"></div>
+
+  <!-- Add Team Member Modal -->
+  <div class="modal-overlay hidden" id="team-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="team-modal-title">Add Team Member</h3>
+        <button class="modal-close" onclick="closeModal('team-modal')">
+          <span class="material-icons-outlined">close</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form id="team-member-form" onsubmit="saveTeamMember(event)">
+          <input type="hidden" id="team-edit-id" value="">
+          <div class="form-group">
+            <label>Full Name *</label>
+            <input type="text" id="team-name" placeholder="Full name" required>
+          </div>
+          <div class="form-group">
+            <label>Email *</label>
+            <input type="email" id="team-email" placeholder="email@example.com" required>
+          </div>
+          <div class="form-group" id="team-password-group">
+            <label>Temporary Password *</label>
+            <input type="password" id="team-password" placeholder="Temporary password">
+            <small style="color:#888;">User must change password on first login</small>
+          </div>
+          <div class="form-group">
+            <label>Role *</label>
+            <select id="team-role" onchange="onTeamRoleChange()">
+              <option value="admin">Admin</option>
+              <option value="moderator">Moderator</option>
+              <option value="analyst">Analyst</option>
+              <option value="finance">Finance</option>
+              <option value="customer_relations">Customer Relations</option>
+              <option value="engineer">Engineer</option>
+              <option value="agrihub_manager">AgriHub Manager</option>
+            </select>
+          </div>
+          <div class="form-group hidden" id="team-agrihub-fields">
+            <label>District</label>
+            <input type="text" id="team-district" placeholder="District name">
+            <label style="margin-top:8px;">Subcounty</label>
+            <input type="text" id="team-subcounty" placeholder="Subcounty name">
+            <label style="margin-top:8px;">AgriHub Name</label>
+            <input type="text" id="team-agrihub-name" placeholder="AgriHub / Cooperative name">
+          </div>
+          <div class="form-group">
+            <label>Permissions</label>
+            <div class="permissions-checklist" id="team-permissions">
+              <label class="checkbox-label"><input type="checkbox" value="view_analytics"> Analytics Dashboard</label>
+              <label class="checkbox-label"><input type="checkbox" value="manage_users"> Manage Users</label>
+              <label class="checkbox-label"><input type="checkbox" value="moderate_products"> Manage Products</label>
+              <label class="checkbox-label"><input type="checkbox" value="manage_orders"> Manage Orders</label>
+              <label class="checkbox-label"><input type="checkbox" value="handle_complaints"> Handle Complaints</label>
+              <label class="checkbox-label"><input type="checkbox" value="send_notifications"> Send Notifications</label>
+              <label class="checkbox-label"><input type="checkbox" value="manage_admins"> Manage Team Members</label>
+              <label class="checkbox-label"><input type="checkbox" value="export_data"> Export Data</label>
+            </div>
+          </div>
+          <button type="submit" class="btn-primary" id="team-save-btn">
+            <span class="material-icons-outlined">save</span>
+            Save Member
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
 
   <script src="app.js"></script>
   <script>

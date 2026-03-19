@@ -340,6 +340,9 @@ function navigateTo(page) {
     orders: 'Orders',
     complaints: 'Complaints Management',
     notifications: 'Notifications',
+    team: 'Team Management',
+    psa: 'PSA Dashboard',
+    agrihub: 'AgriHub Dashboard',
     analytics: 'Analytics & Insights',
     loans: 'Loan Management'
   };
@@ -353,6 +356,9 @@ function navigateTo(page) {
     case 'orders': loadOrders(); break;
     case 'complaints': loadComplaints(); break;
     case 'notifications': loadNotificationHistory(); break;
+    case 'team': loadTeamManagement(); break;
+    case 'psa': loadPsaDashboard(); break;
+    case 'agrihub': loadAgrihubDashboard(); break;
     case 'analytics': loadAnalytics(); break;
     case 'loans': loadLoans(); break;
   }
@@ -1374,4 +1380,405 @@ async function reviewLoan(loanId, status) {
 function setText(id, val) {
   const el = document.getElementById(id);
   if (el) el.textContent = val;
+}
+
+// ═══════════════════════════════════════════════════
+//  TEAM MANAGEMENT
+// ═══════════════════════════════════════════════════
+let allTeamMembers = [];
+
+async function loadTeamManagement() {
+  try {
+    const { data, error } = await sbClient.from('admin_users').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    allTeamMembers = data || [];
+    renderTeamStats();
+    renderTeamTable();
+    renderRolesGrid();
+  } catch (e) {
+    console.error('[Team] Load error:', e);
+    document.getElementById('team-tbody').innerHTML = '<tr><td colspan="7" class="loading-placeholder">Failed to load team data</td></tr>';
+  }
+}
+
+function renderTeamStats() {
+  const active = allTeamMembers.filter(m => m.is_active === true);
+  const inactive = allTeamMembers.filter(m => m.is_active !== true);
+  const roles = new Set(active.map(m => m.role || 'admin'));
+  const agrihubMgrs = active.filter(m => (m.role || '').toLowerCase() === 'agrihub_manager');
+  setText('stat-team-active', active.length);
+  setText('stat-team-roles', roles.size);
+  setText('stat-team-inactive', inactive.length);
+  setText('stat-team-agrihub', agrihubMgrs.length);
+}
+
+function renderTeamTable() {
+  const tbody = document.getElementById('team-tbody');
+  if (!allTeamMembers.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="loading-placeholder">No team members found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = allTeamMembers.map(m => {
+    const perms = m.permissions || [];
+    const permText = perms.length ? perms.slice(0, 3).join(', ') + (perms.length > 3 ? '...' : '') : 'None';
+    const agrihub = m.agrihub_name || m.agrihub || '-';
+    const statusClass = m.is_active ? 'status-active' : 'status-inactive';
+    const statusText = m.is_active ? 'Active' : 'Inactive';
+    return `<tr>
+      <td><strong>${m.name || '-'}</strong></td>
+      <td>${m.email || '-'}</td>
+      <td><span class="status-badge">${formatRole(m.role)}</span></td>
+      <td style="font-size:12px;">${permText}</td>
+      <td>${agrihub}</td>
+      <td><span class="status-badge-sm ${statusClass}">${statusText}</span></td>
+      <td>
+        <button class="btn-sm" onclick="editTeamMember('${m.id}')">Edit</button>
+        ${m.is_active ? `<button class="btn-sm" style="color:var(--red);" onclick="deactivateTeamMember('${m.id}','${(m.name||'').replace(/'/g,"\\'")}')">Deactivate</button>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function renderRolesGrid() {
+  const roles = [
+    { key: 'superadmin', name: 'Super Admin', desc: 'Full access to all features including team management', color: '#EF4444', icon: 'admin_panel_settings', perms: 'All permissions' },
+    { key: 'admin', name: 'Admin', desc: 'General admin access with most permissions', color: '#F97316', icon: 'manage_accounts', perms: 'User management, products, orders, complaints, notifications' },
+    { key: 'moderator', name: 'Moderator', desc: 'Content moderation and complaint handling', color: '#3B82F6', icon: 'verified_user', perms: 'Products, orders, complaints' },
+    { key: 'analyst', name: 'Analyst', desc: 'View analytics and reports only', color: '#14B8A6', icon: 'analytics', perms: 'Analytics dashboard, call analytics, export data' },
+    { key: 'finance', name: 'Finance', desc: 'Financial reporting and order management', color: '#22C55E', icon: 'account_balance', perms: 'Orders, payments, financial reports' },
+    { key: 'customer_relations', name: 'Customer Relations', desc: 'Handle user support and complaints', color: '#8B5CF6', icon: 'support_agent', perms: 'Complaints, notifications, user support' },
+    { key: 'engineer', name: 'Engineer', desc: 'Technical access and system management', color: '#6366F1', icon: 'engineering', perms: 'System settings, technical tools' },
+    { key: 'agrihub_manager', name: 'AgriHub Manager', desc: 'Order tracking and aggregation at AgriHub/Cooperative level', color: '#00695C', icon: 'hub', perms: 'View orders, delivery tracking, financial summaries (read-only)' }
+  ];
+  const active = allTeamMembers.filter(m => m.is_active === true);
+  const grid = document.getElementById('roles-grid');
+  grid.innerHTML = roles.map(r => {
+    const count = active.filter(m => {
+      const mr = (m.role || 'admin').toLowerCase();
+      return mr === r.key || (r.key === 'admin' && !mr) || (r.key === 'superadmin' && (mr === 'superadmin' || mr === 'super_admin'));
+    }).length;
+    return `<div class="role-card" style="border-left-color:${r.color};">
+      <div class="role-header">
+        <div class="role-icon" style="background:${r.color}15;"><span class="material-icons-outlined" style="color:${r.color};">${r.icon}</span></div>
+        <div>
+          <div class="role-name">${r.name}<span class="role-count" style="background:${r.color}15;color:${r.color};">${count} members</span></div>
+        </div>
+      </div>
+      <div class="role-desc">${r.desc}</div>
+      <div class="role-perms">Permissions: ${r.perms}</div>
+    </div>`;
+  }).join('');
+}
+
+function showAddTeamMemberModal() {
+  document.getElementById('team-modal-title').textContent = 'Add Team Member';
+  document.getElementById('team-edit-id').value = '';
+  document.getElementById('team-name').value = '';
+  document.getElementById('team-email').value = '';
+  document.getElementById('team-password').value = '';
+  document.getElementById('team-email').disabled = false;
+  document.getElementById('team-password-group').classList.remove('hidden');
+  document.getElementById('team-role').value = 'admin';
+  document.getElementById('team-agrihub-fields').classList.add('hidden');
+  document.getElementById('team-district').value = '';
+  document.getElementById('team-subcounty').value = '';
+  document.getElementById('team-agrihub-name').value = '';
+  document.querySelectorAll('#team-permissions input[type="checkbox"]').forEach(cb => cb.checked = false);
+  document.getElementById('team-modal').classList.remove('hidden');
+}
+
+function editTeamMember(id) {
+  const member = allTeamMembers.find(m => m.id === id);
+  if (!member) return;
+  document.getElementById('team-modal-title').textContent = 'Edit Team Member';
+  document.getElementById('team-edit-id').value = id;
+  document.getElementById('team-name').value = member.name || '';
+  document.getElementById('team-email').value = member.email || '';
+  document.getElementById('team-email').disabled = true;
+  document.getElementById('team-password-group').classList.add('hidden');
+  document.getElementById('team-role').value = (member.role || 'admin').toLowerCase();
+  onTeamRoleChange();
+  document.getElementById('team-district').value = member.district || '';
+  document.getElementById('team-subcounty').value = member.subcounty || '';
+  document.getElementById('team-agrihub-name').value = member.agrihub_name || member.agrihub || '';
+  const perms = member.permissions || [];
+  document.querySelectorAll('#team-permissions input[type="checkbox"]').forEach(cb => {
+    cb.checked = perms.includes(cb.value);
+  });
+  document.getElementById('team-modal').classList.remove('hidden');
+}
+
+function onTeamRoleChange() {
+  const role = document.getElementById('team-role').value;
+  const fields = document.getElementById('team-agrihub-fields');
+  if (role === 'agrihub_manager') { fields.classList.remove('hidden'); } else { fields.classList.add('hidden'); }
+}
+
+async function saveTeamMember(e) {
+  e.preventDefault();
+  const editId = document.getElementById('team-edit-id').value;
+  const name = document.getElementById('team-name').value.trim();
+  const email = document.getElementById('team-email').value.trim();
+  const password = document.getElementById('team-password').value.trim();
+  const role = document.getElementById('team-role').value;
+  const district = document.getElementById('team-district').value.trim();
+  const subcounty = document.getElementById('team-subcounty').value.trim();
+  const agrihubName = document.getElementById('team-agrihub-name').value.trim();
+  const permissions = [];
+  document.querySelectorAll('#team-permissions input[type="checkbox"]:checked').forEach(cb => permissions.push(cb.value));
+
+  if (!name || !email) { showToast('Name and email are required', 'error'); return; }
+  if (!editId && !password) { showToast('Password is required for new members', 'error'); return; }
+
+  const payload = {
+    name, email, role,
+    permissions,
+    is_active: true,
+  };
+  if (role === 'agrihub_manager') {
+    payload.district = district;
+    payload.subcounty = subcounty;
+    payload.agrihub_name = agrihubName;
+  }
+
+  try {
+    if (editId) {
+      const { error } = await sbClient.from('admin_users').update(payload).eq('id', editId);
+      if (error) throw error;
+      showToast(name + ' has been updated', 'success');
+    } else {
+      // Create new: first create auth user, then admin record
+      const { data: authData, error: authErr } = await sbClient.auth.signUp({ email, password });
+      if (authErr) throw authErr;
+      payload.auth_user_id = authData.user?.id || null;
+      payload.created_at = new Date().toISOString();
+      const { error } = await sbClient.from('admin_users').insert(payload);
+      if (error) throw error;
+      showToast(name + ' has been added to the team', 'success');
+    }
+    closeModal('team-modal');
+    loadTeamManagement();
+  } catch (err) {
+    showToast('Error: ' + (err.message || err), 'error');
+  }
+}
+
+async function deactivateTeamMember(id, name) {
+  if (!confirm('Deactivate ' + name + '? They will no longer be able to access the admin panel.')) return;
+  try {
+    const { error } = await sbClient.from('admin_users').update({ is_active: false }).eq('id', id);
+    if (error) throw error;
+    showToast(name + ' has been deactivated', 'success');
+    loadTeamManagement();
+  } catch (err) {
+    showToast('Failed to deactivate: ' + err.message, 'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  PSA DASHBOARD
+// ═══════════════════════════════════════════════════
+let allPsaProducts = [];
+let allPsaOrders = [];
+
+async function loadPsaDashboard() {
+  try {
+    const [prodRes, orderRes] = await Promise.all([
+      sbClient.from('products').select('*').eq('is_psa', true),
+      sbClient.from('orders').select('*').eq('is_psa_order', true).order('created_at', { ascending: false })
+    ]);
+    allPsaProducts = prodRes.data || [];
+    allPsaOrders = orderRes.data || [];
+    renderPsaStats();
+    renderPsaProducts();
+    renderPsaOrders();
+    renderPsaStatusBreakdown();
+  } catch (e) {
+    console.error('[PSA] Load error:', e);
+  }
+}
+
+function renderPsaStats() {
+  const activeProds = allPsaProducts.filter(p => p.is_active === true);
+  const pendingOrders = allPsaOrders.filter(o => ['Pending','Confirmed','Preparing','Ready','In Transit','Awaiting Confirmation'].includes(o.status));
+  const totalRevenue = allPsaOrders.filter(o => o.status === 'Delivered' || o.status === 'Completed').reduce((s, o) => s + ((o.total_amount || 0) * 1), 0);
+  setText('stat-psa-products', allPsaProducts.length);
+  setText('stat-psa-active', activeProds.length);
+  setText('stat-psa-orders', allPsaOrders.length);
+  setText('stat-psa-pending', pendingOrders.length);
+  const revEl = document.querySelector('#psa-revenue-display .stat-value');
+  if (revEl) revEl.textContent = 'UGX ' + totalRevenue.toLocaleString();
+}
+
+function renderPsaProducts() {
+  const tbody = document.getElementById('psa-products-tbody');
+  if (!allPsaProducts.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="loading-placeholder">No PSA products found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = allPsaProducts.map(p => {
+    const status = p.is_active ? '<span class="status-badge-sm status-active">Active</span>' : '<span class="status-badge-sm status-inactive">Inactive</span>';
+    return `<tr>
+      <td><strong>${p.name || '-'}</strong></td>
+      <td>${p.category || '-'}</td>
+      <td>${(p.price || 0).toLocaleString()}</td>
+      <td>${p.stock_quantity ?? '-'}</td>
+      <td>${status}</td>
+      <td>${p.created_at ? new Date(p.created_at).toLocaleDateString() : '-'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderPsaOrders(filtered) {
+  const orders = filtered || allPsaOrders;
+  const tbody = document.getElementById('psa-orders-tbody');
+  if (!orders.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="loading-placeholder">No PSA orders found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = orders.map(o => {
+    const items = o.items ? (typeof o.items === 'string' ? JSON.parse(o.items) : o.items) : [];
+    const itemText = Array.isArray(items) ? items.map(i => i.name || i.product_name || 'Item').join(', ') : '-';
+    const confirmed = o.seller_confirmed ? '<span class="status-badge-sm status-active">Yes</span>' : '<span class="status-badge-sm status-pending">No</span>';
+    return `<tr>
+      <td>${(o.id || '').toString().substring(0, 8)}...</td>
+      <td>${o.buyer_name || o.buyer_id?.substring(0, 8) || '-'}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${itemText}">${itemText}</td>
+      <td>${(o.total_amount || 0).toLocaleString()}</td>
+      <td><span class="status-badge">${o.status || '-'}</span></td>
+      <td>${confirmed}</td>
+      <td>${o.created_at ? new Date(o.created_at).toLocaleDateString() : '-'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function filterPsaOrders() {
+  const status = document.getElementById('psa-orders-status-filter').value;
+  if (status === 'all') { renderPsaOrders(); return; }
+  renderPsaOrders(allPsaOrders.filter(o => o.status === status));
+}
+
+function renderPsaStatusBreakdown() {
+  const el = document.getElementById('psa-status-breakdown');
+  const statusCounts = {};
+  allPsaOrders.forEach(o => { statusCounts[o.status || 'Unknown'] = (statusCounts[o.status || 'Unknown'] || 0) + 1; });
+  const statusColors = { Pending: '#E88A2D', Confirmed: '#3B82F6', Preparing: '#8B5CF6', 'In Transit': '#17A2B8', Delivered: '#01AC66', Completed: '#22C55E', Cancelled: '#EF4444' };
+  el.innerHTML = Object.entries(statusCounts).map(([status, count]) => {
+    const pct = allPsaOrders.length ? Math.round(count / allPsaOrders.length * 100) : 0;
+    const color = statusColors[status] || '#6B7280';
+    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <span style="font-size:13px;font-weight:600;min-width:100px;">${status}</span>
+      <div style="flex:1;background:#f3f4f6;border-radius:6px;height:22px;overflow:hidden;">
+        <div style="width:${pct}%;height:100%;background:${color};border-radius:6px;display:flex;align-items:center;justify-content:center;">
+          <span style="color:#fff;font-size:11px;font-weight:600;">${count}</span>
+        </div>
+      </div>
+      <span style="font-size:12px;color:#6B7280;min-width:35px;">${pct}%</span>
+    </div>`;
+  }).join('') || '<p style="color:#999;">No orders yet</p>';
+}
+
+// ═══════════════════════════════════════════════════
+//  AGRIHUB DASHBOARD
+// ═══════════════════════════════════════════════════
+let allAgrihubs = [];
+let allAgrihubManagers = [];
+
+async function loadAgrihubDashboard() {
+  try {
+    const [hubRes, mgrRes] = await Promise.all([
+      sbClient.from('agrihubs').select('*').order('name', { ascending: true }),
+      sbClient.from('admin_users').select('*').eq('role', 'agrihub_manager')
+    ]);
+    allAgrihubs = hubRes.data || [];
+    allAgrihubManagers = mgrRes.data || [];
+    renderAgrihubStats();
+    renderAgrihubTable();
+    renderAgrihubManagers();
+    populateAgrihubDistrictFilter();
+  } catch (e) {
+    console.error('[AgriHub] Load error:', e);
+    // If agrihubs table doesn't exist, show a message
+    document.getElementById('agrihub-tbody').innerHTML = '<tr><td colspan="7" class="loading-placeholder">No AgriHub data available. Table may not exist yet.</td></tr>';
+    document.getElementById('agrihub-managers-tbody').innerHTML = '';
+    renderAgrihubManagersFromTeam();
+  }
+}
+
+function renderAgrihubManagersFromTeam() {
+  // Fallback: pull AgriHub manager info from admin_users even if agrihubs table is empty
+  const mgrs = allAgrihubManagers;
+  const districts = new Set(mgrs.map(m => m.district).filter(Boolean));
+  setText('stat-agrihub-total', allAgrihubs.length);
+  setText('stat-agrihub-managers', mgrs.length);
+  setText('stat-agrihub-districts', districts.size);
+  setText('stat-agrihub-members', '-');
+  renderAgrihubManagers();
+}
+
+function renderAgrihubStats() {
+  const districts = new Set(allAgrihubs.map(h => h.district).filter(Boolean));
+  const totalMembers = allAgrihubs.reduce((s, h) => s + ((h.member_count || h.members_count) || 0), 0);
+  setText('stat-agrihub-total', allAgrihubs.length);
+  setText('stat-agrihub-managers', allAgrihubManagers.length);
+  setText('stat-agrihub-districts', districts.size);
+  setText('stat-agrihub-members', totalMembers || '-');
+}
+
+function renderAgrihubTable(filtered) {
+  const hubs = filtered || allAgrihubs;
+  const tbody = document.getElementById('agrihub-tbody');
+  if (!hubs.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="loading-placeholder">No AgriHub centers found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = hubs.map(h => {
+    const mgr = allAgrihubManagers.find(m => m.agrihub_id === h.id || (m.agrihub_name || '').toLowerCase() === (h.name || '').toLowerCase());
+    const mgrName = mgr ? mgr.name : '<span style="color:#999;">Unassigned</span>';
+    const members = h.member_count || h.members_count || 0;
+    const orders = h.order_count || h.orders_count || 0;
+    const isActive = h.is_active !== false;
+    const statusClass = isActive ? 'status-active' : 'status-inactive';
+    return `<tr>
+      <td><strong>${h.name || '-'}</strong></td>
+      <td>${h.district || '-'}</td>
+      <td>${h.subcounty || '-'}</td>
+      <td>${mgrName}</td>
+      <td>${members}</td>
+      <td>${orders}</td>
+      <td><span class="status-badge-sm ${statusClass}">${isActive ? 'Active' : 'Inactive'}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderAgrihubManagers() {
+  const tbody = document.getElementById('agrihub-managers-tbody');
+  if (!allAgrihubManagers.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="loading-placeholder">No AgriHub managers found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = allAgrihubManagers.map(m => {
+    const statusClass = m.is_active ? 'status-active' : 'status-inactive';
+    return `<tr>
+      <td><strong>${m.name || '-'}</strong></td>
+      <td>${m.email || '-'}</td>
+      <td>${m.agrihub_name || m.agrihub || '-'}</td>
+      <td>${m.district || '-'}</td>
+      <td>${m.subcounty || '-'}</td>
+      <td><span class="status-badge-sm ${statusClass}">${m.is_active ? 'Active' : 'Inactive'}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function populateAgrihubDistrictFilter() {
+  const select = document.getElementById('agrihub-district-filter');
+  if (!select) return;
+  const districts = [...new Set(allAgrihubs.map(h => h.district).filter(Boolean))].sort();
+  select.innerHTML = '<option value="all">All Districts</option>' + districts.map(d => `<option value="${d}">${d}</option>`).join('');
+}
+
+function filterAgrihubs() {
+  const district = document.getElementById('agrihub-district-filter').value;
+  if (district === 'all') { renderAgrihubTable(); return; }
+  renderAgrihubTable(allAgrihubs.filter(h => h.district === district));
 }
