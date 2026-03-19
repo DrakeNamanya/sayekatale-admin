@@ -4,7 +4,7 @@
 // ==========================================
 
 // --- SUPABASE CONFIG ---
-const SUPABASE_URL = 'https://oyqjovcwjqeifqmcjepk.sbClient.co';
+const SUPABASE_URL = 'https://oyqjovcwjqeifqmcjepk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95cWpvdmN3anFlaWZxbWNqZXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk0MTQxMzgsImV4cCI6MjA4NDk5MDEzOH0.oIgHUgKQ0sjmzc3yFaZ6SRWF7HoDsKqeph-YWJoWQKs';
 
 // IMPORTANT: Use 'sbClient' to avoid name clash with window.supabase (the SDK object)
@@ -25,8 +25,8 @@ function getSupabaseSDK() {
     return window.supabase;
   }
   // Nested pattern (some CDN builds)
-  if (window.supabase && window.supabase.sbClient && typeof window.supabase.sbClient.createClient === 'function') {
-    return window.supabase.sbClient;
+  if (window.supabase && window.supabase.supabase && typeof window.supabase.supabase.createClient === 'function') {
+    return window.supabase.supabase;
   }
   return null;
 }
