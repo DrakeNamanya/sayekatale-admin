@@ -4,10 +4,11 @@
 // ==========================================
 
 // --- SUPABASE CONFIG ---
-const SUPABASE_URL = 'https://oyqjovcwjqeifqmcjepk.supabase.co';
+const SUPABASE_URL = 'https://oyqjovcwjqeifqmcjepk.sbClient.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95cWpvdmN3anFlaWZxbWNqZXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk0MTQxMzgsImV4cCI6MjA4NDk5MDEzOH0.oIgHUgKQ0sjmzc3yFaZ6SRWF7HoDsKqeph-YWJoWQKs';
 
-let supabase = null;
+// IMPORTANT: Use 'sbClient' to avoid name clash with window.supabase (the SDK object)
+let sbClient = null;
 let currentAdmin = null;
 let allUsers = [];
 let allProducts = [];
@@ -18,25 +19,15 @@ let allLoans = [];
 // --- SUPABASE INIT ---
 // Robust SDK detection that handles all Supabase JS v2 UMD export patterns
 function getSupabaseSDK() {
-  // Pattern 1: Direct global (most common for UMD)
-  if (typeof supabase !== 'undefined' && supabase && typeof supabase.createClient === 'function') {
-    return supabase;
-  }
-  // Pattern 2: window.supabase 
+  // The SDK (supabase.min.js) exports to window.supabase via UMD pattern
+  // We check window.supabase directly (our client variable is named sbClient)
   if (window.supabase && typeof window.supabase.createClient === 'function') {
     return window.supabase;
   }
-  // Pattern 3: Nested supabase.supabase (some CDN builds)
-  if (window.supabase && window.supabase.supabase && typeof window.supabase.supabase.createClient === 'function') {
-    return window.supabase.supabase;
+  // Nested pattern (some CDN builds)
+  if (window.supabase && window.supabase.sbClient && typeof window.supabase.sbClient.createClient === 'function') {
+    return window.supabase.sbClient;
   }
-  // Pattern 4: Global scope via var
-  try {
-    var g = (new Function('return this'))();
-    if (g.supabase && typeof g.supabase.createClient === 'function') {
-      return g.supabase;
-    }
-  } catch(e) {}
   return null;
 }
 
@@ -47,7 +38,7 @@ function initSupabaseClient() {
     return false;
   }
   try {
-    supabase = sdk.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    sbClient = sdk.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     console.log('[Init] Supabase client created successfully');
     return true;
   } catch (err) {
@@ -101,9 +92,9 @@ function mainInit() {
     // SDK might still be loading, retry after a delay
     console.log('[Init] SDK not ready yet, will retry in 2s...');
     setTimeout(function() {
-      if (!supabase) {
+      if (!sbClient) {
         initSupabaseClient();
-        if (!supabase) {
+        if (!sbClient) {
           console.error('[Init] SDK still not available after retry');
           if (errorEl) {
             errorEl.textContent = 'Connection system loading... Click Sign In when ready.';
@@ -115,19 +106,19 @@ function mainInit() {
   }
 
   // Step 3: Check for existing session (async, but errors won't block login)
-  if (supabase) {
+  if (sbClient) {
     checkExistingSession();
   } else {
     // When SDK loads later, check session then
     setTimeout(function() {
-      if (supabase) checkExistingSession();
+      if (sbClient) checkExistingSession();
     }, 3000);
   }
 }
 
 async function checkExistingSession() {
   try {
-    var result = await supabase.auth.getSession();
+    var result = await sbClient.auth.getSession();
     var session = result && result.data && result.data.session;
     if (session) {
       console.log('[Init] Existing session for:', session.user.email);
@@ -187,12 +178,12 @@ async function handleLogin() {
   }
 
   // Try to init Supabase if not ready (last chance)
-  if (!supabase) {
+  if (!sbClient) {
     console.log('[Login] Supabase not ready, attempting init...');
     initSupabaseClient();
   }
   
-  if (!supabase) {
+  if (!sbClient) {
     if (errorEl) {
       errorEl.textContent = 'Connection not ready. Please wait a moment and try again.';
       errorEl.classList.remove('hidden');
@@ -209,7 +200,7 @@ async function handleLogin() {
   try {
     console.log('[Login] Attempting sign in for:', email);
 
-    var result = await supabase.auth.signInWithPassword({
+    var result = await sbClient.auth.signInWithPassword({
       email: email,
       password: password
     });
@@ -234,7 +225,7 @@ async function handleLogin() {
     // Check admin access
     var isAdmin = await checkAdminAccess(data.user.email);
     if (!isAdmin) {
-      await supabase.auth.signOut();
+      await sbClient.auth.signOut();
       throw new Error('This account does not have admin privileges.');
     }
 
@@ -273,7 +264,7 @@ async function checkAdminAccess(email) {
 
   // Check admin_users table
   try {
-    const { data } = await supabase
+    const { data } = await sbClient
       .from('admin_users')
       .select('is_active')
       .eq('email', email.toLowerCase())
@@ -286,7 +277,7 @@ async function checkAdminAccess(email) {
 
 async function loadAdminProfile() {
   try {
-    var result = await supabase
+    var result = await sbClient
       .from('admin_users')
       .select('name, role')
       .eq('email', currentAdmin.email.toLowerCase())
@@ -312,7 +303,7 @@ async function loadAdminProfile() {
 
 async function handleLogout() {
   if (!confirm('Are you sure you want to logout?')) return;
-  await supabase.auth.signOut();
+  await sbClient.auth.signOut();
   currentAdmin = null;
   showScreen('login-screen');
   document.getElementById('email').value = '';
@@ -391,10 +382,10 @@ async function loadOverview() {
   try {
     // Load stats in parallel
     const [usersRes, productsRes, ordersRes, complaintsRes] = await Promise.all([
-      supabase.from('profiles').select('id, role', { count: 'exact', head: false }),
-      supabase.from('products').select('id', { count: 'exact', head: true }),
-      supabase.from('orders').select('id, status', { count: 'exact', head: false }),
-      supabase.from('complaints').select('id, status', { count: 'exact', head: false })
+      sbClient.from('profiles').select('id, role', { count: 'exact', head: false }),
+      sbClient.from('products').select('id', { count: 'exact', head: true }),
+      sbClient.from('orders').select('id, status', { count: 'exact', head: false }),
+      sbClient.from('complaints').select('id, status', { count: 'exact', head: false })
     ]);
 
     const users = usersRes.data || [];
@@ -466,7 +457,7 @@ function renderRoleBars(roleCount, total) {
 async function loadRecentOrders() {
   const container = document.getElementById('recent-orders-list');
   try {
-    const { data } = await supabase
+    const { data } = await sbClient
       .from('orders')
       .select('id, buyer_name, total_amount, status, created_at')
       .order('created_at', { ascending: false })
@@ -495,7 +486,7 @@ async function loadRecentOrders() {
 async function loadRecentComplaints() {
   const container = document.getElementById('recent-complaints-list');
   try {
-    const { data } = await supabase
+    const { data } = await sbClient
       .from('complaints')
       .select('id, subject, user_name, status, priority, created_at')
       .order('created_at', { ascending: false })
@@ -527,7 +518,7 @@ async function loadUsers() {
   tbody.innerHTML = '<tr><td colspan="6" class="loading-placeholder">Loading users...</td></tr>';
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await sbClient
       .from('profiles')
       .select('id, full_name, email, phone_number, role, district, created_at')
       .order('created_at', { ascending: false });
@@ -576,7 +567,7 @@ async function loadProducts() {
   tbody.innerHTML = '<tr><td colspan="7" class="loading-placeholder">Loading products...</td></tr>';
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await sbClient
       .from('products')
       .select('id, name, category, price, stock_quantity, seller_name, is_active, is_psa, created_at')
       .order('created_at', { ascending: false });
@@ -632,7 +623,7 @@ async function loadOrders() {
   tbody.innerHTML = '<tr><td colspan="8" class="loading-placeholder">Loading orders...</td></tr>';
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await sbClient
       .from('orders')
       .select('*')
       .order('created_at', { ascending: false });
@@ -732,7 +723,7 @@ function viewOrder(orderId) {
 async function updateOrderStatus(orderId) {
   const newStatus = document.getElementById('order-status-select').value;
   try {
-    await supabase.from('orders').update({
+    await sbClient.from('orders').update({
       status: newStatus,
       updated_at: new Date().toISOString()
     }).eq('id', orderId);
@@ -751,7 +742,7 @@ async function loadComplaints() {
   tbody.innerHTML = '<tr><td colspan="7" class="loading-placeholder">Loading complaints...</td></tr>';
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await sbClient
       .from('complaints')
       .select('*')
       .order('created_at', { ascending: false });
@@ -857,7 +848,7 @@ async function updateComplaintStatus(complaintId) {
     if (newStatus === 'resolved' || newStatus === 'closed') {
       updateData.resolved_at = new Date().toISOString();
     }
-    await supabase.from('complaints').update(updateData).eq('id', complaintId);
+    await sbClient.from('complaints').update(updateData).eq('id', complaintId);
     showToast('Complaint status updated!', 'success');
     closeModal('complaint-modal');
     loadComplaints();
@@ -884,7 +875,7 @@ async function addComplaintResponse(complaintId) {
   });
 
   try {
-    await supabase.from('complaints').update({
+    await sbClient.from('complaints').update({
       responses,
       status: 'responded',
       updated_at: new Date().toISOString()
@@ -892,7 +883,7 @@ async function addComplaintResponse(complaintId) {
 
     // Also notify the user
     if (complaint.user_id) {
-      await supabase.from('notifications').insert({
+      await sbClient.from('notifications').insert({
         user_id: complaint.user_id,
         title: 'Complaint Updated',
         message: `Your complaint "${complaint.subject}" has received a response from support.`,
@@ -930,15 +921,15 @@ async function sendNotification(e) {
     let userIds = [];
 
     if (target === 'all') {
-      const { data } = await supabase.from('profiles').select('id');
+      const { data } = await sbClient.from('profiles').select('id');
       userIds = (data || []).map(u => u.id);
     } else if (target === 'role') {
       const role = document.getElementById('notif-role').value;
-      const { data } = await supabase.from('profiles').select('id').eq('role', role);
+      const { data } = await sbClient.from('profiles').select('id').eq('role', role);
       userIds = (data || []).map(u => u.id);
     } else if (target === 'single') {
       const email = document.getElementById('notif-user-email').value.trim();
-      const { data } = await supabase.from('profiles').select('id').eq('email', email).maybeSingle();
+      const { data } = await sbClient.from('profiles').select('id').eq('email', email).maybeSingle();
       if (data) userIds = [data.id];
       else { showToast('User not found', 'error'); return; }
     }
@@ -952,11 +943,11 @@ async function sendNotification(e) {
       data: { admin_id: currentAdmin.id, admin_name: currentAdmin.name, target }
     }));
 
-    await supabase.from('notifications').insert(notifications);
+    await sbClient.from('notifications').insert(notifications);
 
     // Log it
     try {
-      await supabase.from('admin_notification_logs').insert({
+      await sbClient.from('admin_notification_logs').insert({
         admin_id: currentAdmin.id,
         admin_name: currentAdmin.name,
         title, message, type, target,
@@ -978,7 +969,7 @@ async function sendNotification(e) {
 async function loadNotificationHistory() {
   const container = document.getElementById('notif-history');
   try {
-    const { data } = await supabase
+    const { data } = await sbClient
       .from('admin_notification_logs')
       .select('*')
       .order('sent_at', { ascending: false })
@@ -1010,9 +1001,9 @@ async function loadNotificationHistory() {
 async function loadAnalytics() {
   try {
     const [ordersRes, callsRes, productsRes] = await Promise.all([
-      supabase.from('orders').select('*'),
-      supabase.from('call_analytics').select('*').order('created_at', { ascending: false }).limit(50),
-      supabase.from('products').select('name, category').eq('is_active', true)
+      sbClient.from('orders').select('*'),
+      sbClient.from('call_analytics').select('*').order('created_at', { ascending: false }).limit(50),
+      sbClient.from('products').select('name, category').eq('is_active', true)
     ]);
 
     const orders = ordersRes.data || [];

@@ -74,7 +74,7 @@
 
           <div id="login-error" class="error-message hidden"></div>
 
-          <form id="login-form" onsubmit="return false;">
+          <form id="login-form">
             <div class="form-group">
               <label for="email">Email Address</label>
               <div class="input-wrapper">
@@ -705,5 +705,36 @@
   <div id="toast" class="toast hidden"></div>
 
   <script src="app.js"></script>
+  <script>
+    // Failsafe: Directly wire login button after app.js loads
+    (function() {
+      var form = document.getElementById('login-form');
+      var btn = document.getElementById('login-btn');
+      if (form) {
+        form.addEventListener('submit', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (typeof handleLogin === 'function') {
+            handleLogin();
+          } else {
+            alert('App still loading. Please wait a moment and try again.');
+          }
+          return false;
+        });
+      }
+      if (btn) {
+        btn.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (typeof handleLogin === 'function') {
+            handleLogin();
+          } else {
+            alert('App still loading. Please wait a moment and try again.');
+          }
+          return false;
+        });
+      }
+    })();
+  </script>
 </body>
 </html>
