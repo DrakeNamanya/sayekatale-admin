@@ -16,204 +16,212 @@ let allComplaints = [];
 let allLoans = [];
 
 // --- SUPABASE INIT ---
-// Supabase JS SDK is loaded via <script> tag in index.html (CDN + local fallback)
-// This function waits for the global to be available with retry logic
-function waitForSupabase(maxWaitMs) {
-  return new Promise((resolve, reject) => {
-    const startTime = Date.now();
-    
-    function check() {
-      // Check both possible global names - CDN v2 uses window.supabase
-      const sb = window.supabase;
-      if (sb && typeof sb.createClient === 'function') {
-        console.log('Supabase SDK found via window.supabase');
-        resolve(sb);
-        return;
-      }
-      
-      // Also check if it's nested (some CDN versions)
-      if (window.supabase && window.supabase.supabase && typeof window.supabase.supabase.createClient === 'function') {
-        console.log('Supabase SDK found via window.supabase.supabase');
-        resolve(window.supabase.supabase);
-        return;
-      }
-      
-      if (Date.now() - startTime > maxWaitMs) {
-        console.error('Supabase SDK not loaded after ' + maxWaitMs + 'ms. window.supabase =', typeof window.supabase);
-        reject(new Error('Supabase SDK not available. Check your network connection and try refreshing.'));
-        return;
-      }
-      
-      setTimeout(check, 150);
+// Robust SDK detection that handles all Supabase JS v2 UMD export patterns
+function getSupabaseSDK() {
+  // Pattern 1: Direct global (most common for UMD)
+  if (typeof supabase !== 'undefined' && supabase && typeof supabase.createClient === 'function') {
+    return supabase;
+  }
+  // Pattern 2: window.supabase 
+  if (window.supabase && typeof window.supabase.createClient === 'function') {
+    return window.supabase;
+  }
+  // Pattern 3: Nested supabase.supabase (some CDN builds)
+  if (window.supabase && window.supabase.supabase && typeof window.supabase.supabase.createClient === 'function') {
+    return window.supabase.supabase;
+  }
+  // Pattern 4: Global scope via var
+  try {
+    var g = (new Function('return this'))();
+    if (g.supabase && typeof g.supabase.createClient === 'function') {
+      return g.supabase;
     }
-    
-    check();
-  });
+  } catch(e) {}
+  return null;
 }
 
-function initSupabase(sb) {
+function initSupabaseClient() {
+  var sdk = getSupabaseSDK();
+  if (!sdk) {
+    console.error('[Init] No Supabase SDK found. window.supabase type:', typeof window.supabase);
+    return false;
+  }
   try {
-    supabase = sb.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    console.log('Supabase client initialized successfully');
+    supabase = sdk.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    console.log('[Init] Supabase client created successfully');
     return true;
   } catch (err) {
-    console.error('Failed to init Supabase client:', err);
+    console.error('[Init] createClient failed:', err);
     return false;
   }
 }
 
 // --- MAIN INIT ---
-document.addEventListener('DOMContentLoaded', async () => {
-  const errorEl = document.getElementById('login-error');
-  console.log('[Init] DOMContentLoaded fired');
+// Use both DOMContentLoaded AND a fallback setTimeout to guarantee execution
+var _initRan = false;
+function mainInit() {
+  if (_initRan) return;
+  _initRan = true;
+  
+  var errorEl = document.getElementById('login-error');
+  console.log('[Init] mainInit() running');
 
-  // Clean up URL if credentials leaked into query params (from previous GET form bug)
-  if (window.location.search.includes('email=') || window.location.search.includes('password=')) {
+  // Clean up URL if credentials leaked into query params
+  if (window.location.search.indexOf('email=') >= 0 || window.location.search.indexOf('password=') >= 0) {
     window.history.replaceState({}, document.title, window.location.pathname);
   }
 
-  // Attach login form handler immediately (prevents form GET submission no matter what)
-  const loginForm = document.getElementById('login-form');
-  if (loginForm) {
-    // Remove any existing action attribute to prevent form submission
-    loginForm.removeAttribute('action');
-    loginForm.addEventListener('submit', function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      console.log('[Init] Form submit event triggered');
-      handleLogin();
-      return false;
-    });
-    // Also handle the button click directly as backup
-    const loginBtn = document.getElementById('login-btn');
-    if (loginBtn) {
-      loginBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log('[Init] Login button click triggered');
+  // Step 1: Attach login handlers SYNCHRONOUSLY (no async, cannot fail)
+  try {
+    var loginForm = document.getElementById('login-form');
+    var loginBtn = document.getElementById('login-btn');
+    
+    if (loginForm) {
+      loginForm.removeAttribute('action');
+      loginForm.onsubmit = function(e) {
+        if (e && e.preventDefault) e.preventDefault();
         handleLogin();
         return false;
-      });
+      };
     }
-    console.log('[Init] Login form handler attached');
-  } else {
-    console.error('[Init] Login form not found!');
+    if (loginBtn) {
+      loginBtn.onclick = function(e) {
+        if (e && e.preventDefault) e.preventDefault();
+        handleLogin();
+        return false;
+      };
+    }
+    console.log('[Init] Login handlers attached via direct assignment');
+  } catch(e) {
+    console.error('[Init] Failed to attach handlers:', e);
   }
 
+  // Step 2: Initialize Supabase client
+  if (!initSupabaseClient()) {
+    // SDK might still be loading, retry after a delay
+    console.log('[Init] SDK not ready yet, will retry in 2s...');
+    setTimeout(function() {
+      if (!supabase) {
+        initSupabaseClient();
+        if (!supabase) {
+          console.error('[Init] SDK still not available after retry');
+          if (errorEl) {
+            errorEl.textContent = 'Connection system loading... Click Sign In when ready.';
+            errorEl.classList.remove('hidden');
+          }
+        }
+      }
+    }, 2000);
+  }
+
+  // Step 3: Check for existing session (async, but errors won't block login)
+  if (supabase) {
+    checkExistingSession();
+  } else {
+    // When SDK loads later, check session then
+    setTimeout(function() {
+      if (supabase) checkExistingSession();
+    }, 3000);
+  }
+}
+
+async function checkExistingSession() {
   try {
-    // Wait for Supabase SDK loaded by <script> tag (up to 15 seconds)
-    console.log('[Init] Waiting for Supabase SDK...');
-    const sb = await waitForSupabase(15000);
-    console.log('[Init] Supabase SDK loaded successfully');
-    
-    if (!initSupabase(sb)) {
-      errorEl.textContent = 'Failed to initialize connection. Please refresh the page.';
-      errorEl.classList.remove('hidden');
-      return;
-    }
-
-    // Hide any previous error
-    errorEl.classList.add('hidden');
-
-    // Check existing session
-    console.log('[Init] Checking existing session...');
-    const { data: { session } } = await supabase.auth.getSession();
+    var result = await supabase.auth.getSession();
+    var session = result && result.data && result.data.session;
     if (session) {
-      console.log('[Init] Existing session found for:', session.user.email);
-      const isAdmin = await checkAdminAccess(session.user.email);
+      console.log('[Init] Existing session for:', session.user.email);
+      var isAdmin = await checkAdminAccess(session.user.email);
       if (isAdmin) {
-        currentAdmin = {
-          id: session.user.id,
-          email: session.user.email,
-          name: 'Administrator'
-        };
+        currentAdmin = { id: session.user.id, email: session.user.email, name: 'Administrator' };
         await loadAdminProfile();
         showDashboard();
         return;
       }
-      console.log('[Init] Session user is not admin, showing login');
-    } else {
-      console.log('[Init] No existing session, showing login');
     }
-
-    // Show login screen
+    console.log('[Init] No valid admin session, showing login');
     showScreen('login-screen');
-
-  } catch (err) {
-    console.error('[Init] Error:', err);
-    errorEl.textContent = err.message || 'Failed to load. Please check your connection and refresh.';
-    errorEl.classList.remove('hidden');
-    
-    // Even if SDK fails, the login button should show an error instead of submitting
-    console.warn('[Init] Supabase SDK not loaded. Login will show appropriate error.');
+  } catch(err) {
+    console.error('[Init] Session check error:', err);
+    showScreen('login-screen');
   }
-});
+}
+
+// Fire on DOMContentLoaded
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', mainInit);
+} else {
+  // DOM already loaded (e.g., script at bottom of body)
+  mainInit();
+}
+// Absolute fallback - if DOMContentLoaded never fires (some edge cases)
+setTimeout(function() { if (!_initRan) mainInit(); }, 5000);
 
 // --- AUTH ---
 async function handleLogin() {
-  const emailInput = document.getElementById('email');
-  const passwordInput = document.getElementById('password');
-  const errorEl = document.getElementById('login-error');
-  const btn = document.getElementById('login-btn');
-  const loader = document.getElementById('login-loader');
-  const btnText = btn.querySelector('.btn-text');
+  var emailInput = document.getElementById('email');
+  var passwordInput = document.getElementById('password');
+  var errorEl = document.getElementById('login-error');
+  var btn = document.getElementById('login-btn');
+  var loader = document.getElementById('login-loader');
+  var btnText = btn ? btn.querySelector('.btn-text') : null;
 
   console.log('[Login] handleLogin() called');
 
-  const email = emailInput.value.trim();
-  const password = passwordInput.value;
-
-  // Validate inputs
-  if (!email || !password) {
-    errorEl.textContent = 'Please enter both email and password.';
-    errorEl.classList.remove('hidden');
-    console.log('[Login] Validation failed - empty fields');
+  // Safety check
+  if (!emailInput || !passwordInput) {
+    alert('Login form elements not found. Please refresh the page.');
     return;
   }
 
-  // Check if Supabase is ready - try to init if not
-  if (!supabase) {
-    console.log('[Login] Supabase client not ready, attempting late init...');
-    try {
-      const sb = window.supabase;
-      if (sb && typeof sb.createClient === 'function') {
-        initSupabase(sb);
-        console.log('[Login] Late init succeeded');
-      } else if (sb && sb.supabase && typeof sb.supabase.createClient === 'function') {
-        initSupabase(sb.supabase);
-        console.log('[Login] Late init succeeded (nested)');
-      }
-    } catch (e) {
-      console.error('[Login] Late init error:', e);
-    }
-    
-    if (!supabase) {
-      errorEl.textContent = 'System not ready. Please refresh the page and try again.';
+  var email = emailInput.value.trim();
+  var password = passwordInput.value;
+
+  // Validate inputs
+  if (!email || !password) {
+    if (errorEl) {
+      errorEl.textContent = 'Please enter both email and password.';
       errorEl.classList.remove('hidden');
-      console.error('[Login] Supabase still null after late init attempt');
-      return;
     }
+    return;
+  }
+
+  // Try to init Supabase if not ready (last chance)
+  if (!supabase) {
+    console.log('[Login] Supabase not ready, attempting init...');
+    initSupabaseClient();
+  }
+  
+  if (!supabase) {
+    if (errorEl) {
+      errorEl.textContent = 'Connection not ready. Please wait a moment and try again.';
+      errorEl.classList.remove('hidden');
+    }
+    return;
   }
 
   // Show loading state
-  errorEl.classList.add('hidden');
-  btnText.textContent = 'Signing in...';
-  loader.classList.remove('hidden');
-  btn.disabled = true;
+  if (errorEl) errorEl.classList.add('hidden');
+  if (btnText) btnText.textContent = 'Signing in...';
+  if (loader) loader.classList.remove('hidden');
+  if (btn) btn.disabled = true;
 
   try {
     console.log('[Login] Attempting sign in for:', email);
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    var result = await supabase.auth.signInWithPassword({
       email: email,
       password: password
     });
 
+    var data = result.data;
+    var error = result.error;
+
     if (error) {
-      console.error('[Login] Supabase auth error:', error);
-      let msg = error.message || 'Invalid credentials';
-      if (msg.includes('Invalid login')) msg = 'Invalid email or password. Please try again.';
-      if (msg.includes('Email not confirmed')) msg = 'Please verify your email first.';
+      console.error('[Login] Auth error:', error);
+      var msg = error.message || 'Invalid credentials';
+      if (msg.indexOf('Invalid login') >= 0) msg = 'Invalid email or password. Please try again.';
+      if (msg.indexOf('Email not confirmed') >= 0) msg = 'Please verify your email first.';
       throw new Error(msg);
     }
 
@@ -221,16 +229,16 @@ async function handleLogin() {
       throw new Error('Authentication failed. No user data returned.');
     }
 
-    console.log('[Login] Auth successful, user:', data.user.email, '- checking admin access...');
+    console.log('[Login] Auth OK for:', data.user.email);
 
     // Check admin access
-    const isAdmin = await checkAdminAccess(data.user.email);
+    var isAdmin = await checkAdminAccess(data.user.email);
     if (!isAdmin) {
       await supabase.auth.signOut();
-      throw new Error('This account does not have admin privileges. Contact your administrator.');
+      throw new Error('This account does not have admin privileges.');
     }
 
-    console.log('[Login] Admin access confirmed. Loading dashboard...');
+    console.log('[Login] Admin access confirmed!');
 
     currentAdmin = {
       id: data.user.id,
@@ -240,7 +248,7 @@ async function handleLogin() {
 
     await loadAdminProfile();
 
-    // Clear form fields for security
+    // Clear form
     emailInput.value = '';
     passwordInput.value = '';
 
@@ -248,12 +256,14 @@ async function handleLogin() {
 
   } catch (err) {
     console.error('[Login] Error:', err);
-    errorEl.textContent = err.message;
-    errorEl.classList.remove('hidden');
+    if (errorEl) {
+      errorEl.textContent = err.message || 'Login failed. Please try again.';
+      errorEl.classList.remove('hidden');
+    }
   } finally {
-    btnText.textContent = 'Sign In';
-    loader.classList.add('hidden');
-    btn.disabled = false;
+    if (btnText) btnText.textContent = 'Sign In';
+    if (loader) loader.classList.add('hidden');
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -269,18 +279,19 @@ async function checkAdminAccess(email) {
       .eq('email', email.toLowerCase())
       .maybeSingle();
     return data?.is_active === true;
-  } catch {
+  } catch(e) {
     return email.toLowerCase() === 'admin@datacollectorsltd.org';
   }
 }
 
 async function loadAdminProfile() {
   try {
-    const { data } = await supabase
+    var result = await supabase
       .from('admin_users')
       .select('name, role')
       .eq('email', currentAdmin.email.toLowerCase())
       .maybeSingle();
+    var data = result.data;
 
     if (data) {
       currentAdmin.name = data.name || 'Administrator';
@@ -289,7 +300,7 @@ async function loadAdminProfile() {
       currentAdmin.name = 'PSA Administrator';
       currentAdmin.role = 'superadmin';
     }
-  } catch {
+  } catch(e) {
     currentAdmin.name = 'PSA Administrator';
     currentAdmin.role = 'superadmin';
   }
